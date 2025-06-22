@@ -34,7 +34,7 @@ It includes a project management dashboard with user, project, and task manageme
 
 1. **Clone the repository**
    ```sh
-   git clone https://github.com/your-username/my-laravel-app.git
+   https://github.com/RHWorkspace/RHWorkspace.git
    cd my-laravel-app
    ```
 
