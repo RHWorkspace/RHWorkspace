@@ -115,6 +115,105 @@ This project uses [React](https://react.dev/) with [Vite](https://vitejs.dev/) a
 - [React Documentation](https://react.dev/)
 - [Tailwind CSS Documentation](https://tailwindcss.com/)
 
+---
+
+## Screenshots
+
+| Dashboard | Timeline (Gantt) | Project Detail |
+|-----------|------------------|---------------|
+| ![Dashboard](docs/screens/dashboard.png) | ![Timeline](docs/screens/timeline.png) | ![Project](docs/screens/project.png) |
+
+---
+
+## API Endpoints
+
+- **Projects:**  
+  - `GET /projects` — List all projects  
+  - `POST /projects` — Create new project  
+  - `PUT /projects/{id}` — Update project  
+  - `DELETE /projects/{id}` — Delete project  
+
+- **Tasks:**  
+  - `GET /tasks` — List all tasks  
+  - `POST /tasks` — Create new task  
+  - `PUT /tasks/{id}` — Update task  
+  - `DELETE /tasks/{id}` — Delete task  
+
+- **Users:**  
+  - `GET /users` — List users  
+  - `POST /register` — Register  
+  - `POST /login` — Login  
+  - `POST /logout` — Logout  
+
+---
+
+## Gantt Timeline
+
+The Gantt Timeline page (`/timeline`) visualizes project and task schedules with:
+- **Weekly, Monthly, Quarterly views**
+- **Progress bars** for each project
+- **Color-coded task bars** by status (To Do, In Progress, Done)
+- **Assignee initials** on task bars
+- **Interactive tooltips** with task details
+- **Responsive and scrollable table**
+
+---
+
+## User Roles & Permissions
+
+- **Admin:** Manage all users, projects, and tasks
+- **Project Manager:** Manage assigned projects and tasks
+- **Member:** View and update assigned tasks
+
+_Roles can be customized in the database or via the admin panel._
+
+---
+
+## Environment Variables
+
+Key `.env` settings:
+```
+APP_NAME=
+APP_ENV=local
+APP_KEY=base64:...
+DB_CONNECTION=
+DB_HOST=
+DB_PORT=3306
+DB_DATABASE=
+DB_USERNAME=
+DB_PASSWORD=
+```
+_See `.env.example` for more._
+
+---
+
+## Troubleshooting
+
+- **Port already in use:**  
+  Change the port with `php artisan serve --port=8080`
+- **Frontend not updating:**  
+  Try `npm run dev -- --force`
+- **Database errors:**  
+  Check your `.env` and run `php artisan migrate:fresh --seed`
+
+---
+
+## Contribution
+
+Pull requests are welcome!  
+Please open an issue first to discuss major changes.
+
+---
+
+## Credits
+
+- Laravel by [Taylor Otwell](https://github.com/taylorotwell)
+- Inertia.js by [Jonathan Reinink](https://github.com/reinink)
+- React by [Meta](https://react.dev/)
+- Tailwind CSS by [Tailwind Labs](https://tailwindcss.com/)
+
+---
+
 ## License
 
-The Laravel framework is open-sourced software licensed under the [MIT license](https://opensource.org/licenses/MIT).
+This project is open-sourced under the [MIT license](https://opensource.org/licenses/MIT).

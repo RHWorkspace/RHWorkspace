@@ -86,6 +86,24 @@ export default function ProjectGanttView() {
     }
   };
 
+  // Tambahkan fungsi untuk progress project
+  const getProjectProgress = (tasks) => {
+    if (!tasks.length) return 0;
+    const done = tasks.filter(t => t.status === "done").length;
+    return Math.round((done / tasks.length) * 100);
+  };
+
+  // Untuk highlight hari/minggu/bulan ini
+  const isCurrentPeriod = (idx) => {
+    if (viewMode === "weekly") {
+      return weeklyDays[idx] && today.isSame(weeklyDays[idx].weekStart, 'week');
+    }
+    if (viewMode === "monthly" || viewMode === "quarterly") {
+      return months[idx] && today.isSame(months[idx], 'month');
+    }
+    return false;
+  };
+
   // --- HEADER & DAYS ---
   let headerRow1 = null, headerRow2 = null, days = [];
   if (viewMode === 'weekly') {
@@ -395,7 +413,19 @@ export default function ProjectGanttView() {
                       }}
                       colSpan={1}
                     >
-                      {project.name}
+                      <div className="flex items-center justify-between">
+                        <span>{project.name}</span>
+                        {/* Progress Bar */}
+                        <div className="flex items-center gap-2">
+                          <div className="w-24 h-2 bg-gray-200 rounded">
+                            <div
+                              className="h-2 rounded bg-gradient-to-r from-blue-400 to-green-400"
+                              style={{ width: `${getProjectProgress(project.tasks)}%` }}
+                            ></div>
+                          </div>
+                          <span className="text-xs text-gray-500">{getProjectProgress(project.tasks)}%</span>
+                        </div>
+                      </div>
                     </td>
                     {/* Empty cells for timeline */}
                     {(() => {
@@ -405,7 +435,10 @@ export default function ProjectGanttView() {
                           : months.length;
                       if (viewMode === "quarterly") count = months.length;
                       return Array.from({ length: count }).map((_, i) => (
-                        <td key={i} className="border-b px-0 py-2"></td>
+                        <td
+                          key={i}
+                          className={`border-b px-0 py-2 ${isCurrentPeriod(i) ? 'bg-yellow-50' : ''}`}
+                        ></td>
                       ));
                     })()}
                   </tr>
@@ -458,9 +491,7 @@ export default function ProjectGanttView() {
                                 style={{ padding: 0, background: "transparent" }}
                               >
                                 <div
-                                  className={`h-6 rounded flex items-center ${getColor(
-                                    task.status
-                                  )} shadow`}
+                                  className={`h-6 rounded flex items-center shadow group-hover:scale-105 transition-transform duration-150 ${getColor(task.status)}`}
                                   style={{
                                     width: `${
                                       Math.min(barLength, count - startIdx) *
@@ -469,7 +500,12 @@ export default function ProjectGanttView() {
                                     minWidth: "28px",
                                     marginLeft: "2px",
                                     marginRight: "2px",
-                                    position: "relative"
+                                    position: "relative",
+                                    background: task.status === "done"
+                                      ? "linear-gradient(90deg, #34d399 0%, #10b981 100%)"
+                                      : task.status === "in_progress"
+                                      ? "linear-gradient(90deg, #60a5fa 0%, #2563eb 100%)"
+                                      : "linear-gradient(90deg, #d1d5db 0%, #6b7280 100%)"
                                   }}
                                   title={`${task.title} (${dayjs(
                                     task.start_date
@@ -477,6 +513,14 @@ export default function ProjectGanttView() {
                                     task.due_date
                                   ).format("MMM D")})`}
                                 >
+                                  {/* Avatar/Initials */}
+                                  {task.assignee && (
+                                    <span className="w-6 h-6 rounded-full bg-white text-blue-600 flex items-center justify-center text-xs font-bold mr-2 border border-blue-200">
+                                      {task.assignee.name
+                                        ? task.assignee.name.split(' ').map(n => n[0]).join('').toUpperCase()
+                                        : "U"}
+                                    </span>
+                                  )}
                                   <span className="ml-2 text-xs text-white font-semibold truncate">
                                     {dayjs(task.start_date).format("MMM D")} -{" "}
                                     {dayjs(task.due_date).format("MMM D")}
@@ -488,6 +532,14 @@ export default function ProjectGanttView() {
                                       ? "⏳"
                                       : ""}
                                   </span>
+                                  {/* Tooltip */}
+                                  <div className="absolute left-0 top-8 z-50 hidden group-hover:block bg-white border rounded shadow px-3 py-2 text-xs text-gray-700 min-w-[180px]">
+                                    <div className="font-bold">{task.title}</div>
+                                    <div>Status: <span className="capitalize">{task.status.replace("_", " ")}</span></div>
+                                    <div>Start: {dayjs(task.start_date).format("DD MMM YYYY")}</div>
+                                    <div>Due: {dayjs(task.due_date).format("DD MMM YYYY")}</div>
+                                    {task.assignee && <div>Assignee: {task.assignee.name}</div>}
+                                  </div>
                                 </div>
                               </td>
                             );

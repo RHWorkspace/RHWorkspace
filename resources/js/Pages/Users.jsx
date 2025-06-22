@@ -1,13 +1,31 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useRef } from 'react';
 import axios from 'axios';
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout';
 import { Head, usePage } from '@inertiajs/react';
+
+const AVATAR_COLORS = [
+  'from-pink-400 to-pink-600',
+  'from-blue-400 to-blue-600',
+  'from-green-400 to-green-600',
+  'from-yellow-400 to-yellow-600',
+  'from-purple-400 to-purple-600',
+  'from-indigo-400 to-indigo-600',
+  'from-red-400 to-red-600',
+];
+
+function getAvatarColor(name) {
+  let hash = 0;
+  for (let i = 0; i < name.length; i++) hash = name.charCodeAt(i) + ((hash << 5) - hash);
+  return AVATAR_COLORS[Math.abs(hash) % AVATAR_COLORS.length];
+}
 
 export default function Users() {
   const { auth } = usePage().props;
   const [users, setUsers] = useState([]);
   const [search, setSearch] = useState('');
   const [loading, setLoading] = useState(false);
+  const [toast, setToast] = useState({ show: false, message: '', type: 'success' });
+  const [filterGmail, setFilterGmail] = useState(false);
 
   // Pagination state
   const [page, setPage] = useState(1);
@@ -20,6 +38,7 @@ export default function Users() {
   const [editId, setEditId] = useState(null);
   const [formError, setFormError] = useState('');
   const [showDeleteId, setShowDeleteId] = useState(null);
+  const firstInputRef = useRef(null);
 
   // Sorting state
   const [sortBy, setSortBy] = useState('name');
@@ -29,6 +48,12 @@ export default function Users() {
     fetchUsers();
   }, []);
 
+  useEffect(() => {
+    if (showModal && firstInputRef.current) {
+      setTimeout(() => firstInputRef.current.focus(), 100);
+    }
+  }, [showModal]);
+
   const fetchUsers = async () => {
     setLoading(true);
     try {
@@ -36,6 +61,7 @@ export default function Users() {
       setUsers(res.data);
     } catch {
       setUsers([]);
+      setToast({ show: true, message: 'Failed to fetch users.', type: 'error' });
     }
     setLoading(false);
   };
@@ -53,8 +79,9 @@ export default function Users() {
 
   const filteredUsers = sortedUsers.filter(
     (user) =>
-      user.name.toLowerCase().includes(search.toLowerCase()) ||
-      user.email.toLowerCase().includes(search.toLowerCase())
+      (user.name.toLowerCase().includes(search.toLowerCase()) ||
+        user.email.toLowerCase().includes(search.toLowerCase())) &&
+      (!filterGmail || user.email.endsWith('@gmail.com'))
   );
 
   // Pagination logic
@@ -91,11 +118,18 @@ export default function Users() {
   const handleSubmit = async (e) => {
     e.preventDefault();
     setFormError('');
+    // Simple email validation
+    if (!/\S+@\S+\.\S+/.test(form.email)) {
+      setFormError('Email is invalid.');
+      return;
+    }
     try {
       if (modalType === 'add') {
         await axios.post('/users', form);
+        setToast({ show: true, message: 'User added successfully!', type: 'success' });
       } else {
         await axios.put(`/users/${editId}`, form);
+        setToast({ show: true, message: 'User updated successfully!', type: 'success' });
       }
       fetchUsers();
       closeModal();
@@ -107,6 +141,7 @@ export default function Users() {
       } else {
         setFormError('Failed to save user.');
       }
+      setToast({ show: true, message: 'Failed to save user.', type: 'error' });
     }
   };
 
@@ -115,8 +150,9 @@ export default function Users() {
       await axios.delete(`/users/${id}`);
       fetchUsers();
       setShowDeleteId(null);
+      setToast({ show: true, message: 'User deleted.', type: 'success' });
     } catch {
-      // handle error if needed
+      setToast({ show: true, message: 'Failed to delete user.', type: 'error' });
     }
   };
 
@@ -134,14 +170,39 @@ export default function Users() {
   return (
     <AuthenticatedLayout user={auth.user}>
       <Head title="Manage Users" />
+      {/* Loading Overlay */}
+      {loading && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-30">
+          <div className="bg-white rounded-full p-6 shadow-lg flex flex-col items-center">
+            <svg className="animate-spin h-8 w-8 text-blue-500 mb-2" viewBox="0 0 24 24">
+              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none"/>
+              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z"/>
+            </svg>
+            <span className="text-blue-700 font-semibold">Loading...</span>
+          </div>
+        </div>
+      )}
+
+      {/* Toast Notification */}
+      {toast.show && (
+        <div className={`fixed top-6 right-6 z-50 px-6 py-3 rounded shadow-lg text-white font-semibold transition-all
+          ${toast.type === 'success' ? 'bg-green-600' : 'bg-red-600'}`}>
+          {toast.message}
+          <button className="ml-4 text-white font-bold" onClick={() => setToast({ ...toast, show: false })}>×</button>
+        </div>
+      )}
+
       <div className="max-w-6xl mx-auto py-8">
         <h1 className="text-2xl font-bold mb-6 flex items-center gap-2">
           <svg className="w-7 h-7 text-blue-500" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" d="M17 20h5v-2a4 4 0 00-3-3.87M9 20H4v-2a4 4 0 013-3.87m9-4a4 4 0 10-8 0 4 4 0 008 0zm6 4a4 4 0 00-3-3.87M9 16a4 4 0 00-3 3.87" />
           </svg>
           Manage Users
+          <span className="ml-2 bg-blue-100 text-blue-700 px-3 py-1 rounded-full text-xs font-bold">
+            {users.length} users
+          </span>
         </h1>
-        <div className="mb-4 flex items-center gap-2">
+        <div className="mb-4 flex flex-wrap items-center gap-2">
           <input
             type="text"
             className="border border-gray-300 rounded px-3 py-2 w-full max-w-xs focus:ring-2 focus:ring-blue-200"
@@ -158,16 +219,9 @@ export default function Users() {
             disabled={loading}
             title="Refresh"
           >
-            {loading ? (
-              <svg className="animate-spin h-5 w-5 mx-auto" viewBox="0 0 24 24">
-                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none"/>
-                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z"/>
-              </svg>
-            ) : (
-              <svg className="h-5 w-5 mx-auto" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" d="M4 4v5h.582M20 20v-5h-.581M5 19A9 9 0 1119 5" />
-              </svg>
-            )}
+            <svg className="h-5 w-5 mx-auto" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" d="M4 4v5h.582M20 20v-5h-.581M5 19A9 9 0 1119 5" />
+            </svg>
           </button>
           <button
             className="bg-green-600 text-white px-4 py-2 rounded hover:bg-green-700 transition"
@@ -176,25 +230,28 @@ export default function Users() {
           >
             + Add
           </button>
+          <label className="flex items-center gap-1 ml-4 text-sm">
+            <input
+              type="checkbox"
+              checked={filterGmail}
+              onChange={e => setFilterGmail(e.target.checked)}
+              className="accent-blue-600"
+            />
+            Only @gmail.com
+          </label>
         </div>
         <div className="overflow-x-auto rounded shadow">
-          <table className="w-full text-sm bg-white border-separate border-spacing-y-2">
+          <table className="w-full text-sm bg-white border-separate border-spacing-y-1">
             <thead>
               <tr>
-                <th className="py-3 px-4 text-left font-semibold w-10 bg-blue-50 text-blue-800 rounded-s-lg">
-                  #
-                </th>
+                <th className="py-3 px-4 text-left font-semibold w-10 bg-blue-50 text-blue-800 rounded-s-lg">#</th>
                 <th
                   className="py-3 px-4 text-left font-semibold bg-blue-50 text-blue-800 cursor-pointer select-none"
                   onClick={() => handleSort('name')}
                 >
                   Name
                   <span className="ml-1 align-middle">
-                    {sortBy === 'name' ? (
-                      sortDir === 'asc' ? ' ▲' : ' ▼'
-                    ) : (
-                      <span className="text-gray-300">▲</span>
-                    )}
+                    {sortBy === 'name' ? (sortDir === 'asc' ? ' ▲' : ' ▼') : <span className="text-gray-300">▲</span>}
                   </span>
                 </th>
                 <th
@@ -203,16 +260,10 @@ export default function Users() {
                 >
                   Email
                   <span className="ml-1 align-middle">
-                    {sortBy === 'email' ? (
-                      sortDir === 'asc' ? ' ▲' : ' ▼'
-                    ) : (
-                      <span className="text-gray-300">▲</span>
-                    )}
+                    {sortBy === 'email' ? (sortDir === 'asc' ? ' ▲' : ' ▼') : <span className="text-gray-300">▲</span>}
                   </span>
                 </th>
-                <th className="py-3 px-4 text-left font-semibold bg-blue-50 text-blue-800 rounded-e-lg">
-                  Action
-                </th>
+                <th className="py-3 px-4 text-left font-semibold bg-blue-50 text-blue-800 rounded-e-lg">Action</th>
               </tr>
             </thead>
             <tbody>
@@ -232,13 +283,13 @@ export default function Users() {
               {paginatedUsers.map((user, idx) => (
                 <tr
                   key={user.id}
-                  className="transition-all duration-200 hover:bg-blue-50 bg-white rounded-lg border border-blue-100"
+                  className={`transition-all duration-200 hover:bg-blue-50 ${idx % 2 === 1 ? 'bg-blue-50/30' : 'bg-white'} rounded-lg border border-blue-100`}
                 >
                   <td className="py-3 px-4 rounded-s-lg font-semibold text-blue-900 align-middle">
                     {(page - 1) * perPage + idx + 1}
                   </td>
                   <td className="py-3 px-4 font-medium text-gray-800 flex items-center gap-3 align-middle">
-                    <span className="inline-flex items-center justify-center w-9 h-9 rounded-full bg-gradient-to-br from-blue-200 to-blue-400 text-white font-bold text-base shadow">
+                    <span className={`inline-flex items-center justify-center w-9 h-9 rounded-full bg-gradient-to-br ${getAvatarColor(user.name)} text-white font-bold text-base shadow`}>
                       {user.name?.[0]?.toUpperCase() || '-'}
                     </span>
                     <span className="text-base">{user.name}</span>
@@ -281,11 +332,14 @@ export default function Users() {
           <div className="flex justify-center items-center gap-2 mt-6">
             <button
               className="px-3 py-1 rounded bg-gray-200 text-gray-700 hover:bg-gray-300"
+              onClick={() => setPage(1)}
+              disabled={page === 1}
+            >⏮ First</button>
+            <button
+              className="px-3 py-1 rounded bg-gray-200 text-gray-700 hover:bg-gray-300"
               onClick={() => setPage(page - 1)}
               disabled={page === 1}
-            >
-              Prev
-            </button>
+            >Prev</button>
             {[...Array(totalPages)].map((_, i) => (
               <button
                 key={i}
@@ -299,9 +353,12 @@ export default function Users() {
               className="px-3 py-1 rounded bg-gray-200 text-gray-700 hover:bg-gray-300"
               onClick={() => setPage(page + 1)}
               disabled={page === totalPages}
-            >
-              Next
-            </button>
+            >Next</button>
+            <button
+              className="px-3 py-1 rounded bg-gray-200 text-gray-700 hover:bg-gray-300"
+              onClick={() => setPage(totalPages)}
+              disabled={page === totalPages}
+            >Last ⏭</button>
           </div>
         )}
         <div className="mt-6 text-xs text-gray-400 text-center">
@@ -311,8 +368,14 @@ export default function Users() {
 
       {/* Modal Add/Edit */}
       {showModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-40">
-          <div className="bg-white rounded-xl shadow-lg w-full max-w-md p-8 relative">
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-40"
+          onClick={closeModal}
+        >
+          <div
+            className="bg-white rounded-xl shadow-lg w-full max-w-md p-8 relative"
+            onClick={e => e.stopPropagation()}
+          >
             <button
               className="absolute top-3 right-4 text-gray-400 hover:text-gray-700 text-2xl font-bold focus:outline-none"
               onClick={closeModal}
@@ -335,6 +398,7 @@ export default function Users() {
                   value={form.name}
                   onChange={handleFormChange}
                   required
+                  ref={firstInputRef}
                 />
               </div>
               <div>

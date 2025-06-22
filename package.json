@@ -39,6 +39,8 @@
         "@fullcalendar/list": "^6.1.17",
         "@fullcalendar/react": "^6.1.17",
         "@fullcalendar/timegrid": "^6.1.17",
-        "dayjs": "^1.11.13"
+        "dayjs": "^1.11.13",
+        "react-icons": "^5.5.0",
+        "xlsx": "^0.18.5"
     }
 }

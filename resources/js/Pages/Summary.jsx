@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout';
 import { Head, usePage } from '@inertiajs/react';
 import axios from 'axios';
+import { FaUserFriends, FaProjectDiagram, FaTasks, FaDownload } from 'react-icons/fa';
 
 function Card({ label, value, color }) {
   const colors = {
@@ -84,15 +85,71 @@ export default function Summary() {
     .sort((a, b) => new Date(b.created_at) - new Date(a.created_at))
     .slice(0, 10); // tampilkan 10 terbaru
 
+  // Statistik tambahan
+  const totalMembers = users.length;
+  const totalProjects = projects.length;
+  const avgTaskPerMember = totalMembers ? (tasks.length / totalMembers).toFixed(1) : 0;
+  const avgTaskPerProject = totalProjects ? (tasks.length / totalProjects).toFixed(1) : 0;
+
+  // Fungsi export CSV sederhana
+  const exportCSV = () => {
+    const header = 'Task,Project,Assigned,Status,Due Date\n';
+    const rows = tasks.map(t =>
+      [
+        `"${t.title}"`,
+        `"${projects.find(p => p.id === t.project_id)?.name || '-'}"`,
+        `"${users.find(u => u.id === t.assignment_id)?.name || '-'}"`,
+        `"${t.status}"`,
+        `"${t.due_date || '-'}"`
+      ].join(',')
+    ).join('\n');
+    const blob = new Blob([header + rows], { type: 'text/csv' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'tasks-summary.csv';
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
   return (
     <AuthenticatedLayout header={<h2 className="text-xl font-semibold leading-tight text-gray-800">Summary</h2>}>
       <Head title="Summary" />
 
-      <div className="bg-blue-50 min-h-screen py-6 px-4 sm:px-8">
+      <div className="bg-gradient-to-br from-blue-50 to-blue-100 min-h-screen py-6 px-4 sm:px-8">
         <div className="max-w-7xl mx-auto">
-          {error && (
-            <div className="mb-4 p-3 bg-red-100 text-red-700 rounded">{error}</div>
-          )}
+          {/* Greeting */}
+          <div className="mb-6">
+            <h1 className="text-2xl font-bold text-blue-900">Hi, {auth?.user?.name || 'User'} 👋</h1>
+            <p className="text-gray-600">Here’s your project & task summary at a glance.</p>
+          </div>
+
+          {/* Statistik Ringkas */}
+          <div className="flex flex-wrap gap-4 mb-6 justify-center">
+            <div className="flex items-center gap-2 bg-white rounded shadow px-4 py-2">
+              <FaUserFriends className="text-blue-500" />
+              <span className="font-bold">{totalMembers}</span> Members
+            </div>
+            <div className="flex items-center gap-2 bg-white rounded shadow px-4 py-2">
+              <FaProjectDiagram className="text-green-500" />
+              <span className="font-bold">{totalProjects}</span> Projects
+            </div>
+            <div className="flex items-center gap-2 bg-white rounded shadow px-4 py-2">
+              <FaTasks className="text-orange-500" />
+              <span className="font-bold">{avgTaskPerMember}</span> Avg Task/Member
+            </div>
+            <div className="flex items-center gap-2 bg-white rounded shadow px-4 py-2">
+              <FaTasks className="text-purple-500" />
+              <span className="font-bold">{avgTaskPerProject}</span> Avg Task/Project
+            </div>
+            <button
+              onClick={exportCSV}
+              className="flex items-center gap-2 bg-blue-600 text-white px-4 py-2 rounded shadow hover:bg-blue-700 transition"
+              title="Export tasks to CSV"
+            >
+              <FaDownload /> Export CSV
+            </button>
+          </div>
 
           {/* Centered summary cards */}
           <div className="flex flex-wrap gap-4 mb-6 justify-center">
@@ -144,9 +201,15 @@ export default function Summary() {
                       <div className="w-8 h-8 rounded-full bg-green-200 text-green-800 flex items-center justify-center font-bold text-base">
                         {project.name?.[0] || '?'}
                       </div>
-                      <div>
+                      <div className="flex-1">
                         <div className="font-semibold">{project.name}</div>
                         <div className="text-xs text-gray-500">{project.desc}</div>
+                        <div className="w-full bg-gray-200 rounded-full h-2 mt-1">
+                          <div
+                            className="bg-green-400 h-2 rounded-full"
+                            style={{ width: `${project.percentDone}%` }}
+                          ></div>
+                        </div>
                       </div>
                       <div className="ml-auto flex flex-col items-end">
                         <span className="font-bold text-green-700">{project.totalTasks} task{project.totalTasks !== 1 ? 's' : ''}</span>
@@ -197,8 +260,27 @@ export default function Summary() {
             )}
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mt-8">
-            {/* Semua Task, urut due date */}
+          {/* Filter/Search Task */}
+          <div className="flex items-center gap-2 mt-8 mb-2">
+            <input
+              type="text"
+              placeholder="Search task title..."
+              className="border rounded px-2 py-1 w-60"
+              onChange={e => {
+                const q = e.target.value.toLowerCase();
+                setTasks(tasks =>
+                  tasks.map(t => ({
+                    ...t,
+                    _visible: t.title?.toLowerCase().includes(q)
+                  }))
+                );
+              }}
+            />
+            <span className="text-xs text-gray-500">Type to filter tasks</span>
+          </div>
+
+          {/* Semua Task, urut due date, highlight overdue */}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mt-2">
             <div className="bg-white rounded shadow p-6 col-span-2">
               <h2 className="text-lg font-semibold mb-4">All Tasks (by Due Date)</h2>
               {loading ? (
@@ -208,23 +290,27 @@ export default function Summary() {
                   {sortedTasks.length === 0 && (
                     <li className="text-gray-400">No tasks.</li>
                   )}
-                  {sortedTasks.map((task) => (
-                    <li key={task.id} className="flex items-center gap-3">
-                      <div className="w-8 h-8 rounded-full bg-orange-200 text-orange-800 flex items-center justify-center font-bold text-base">
-                        {task.title?.[0] || '?'}
-                      </div>
-                      <div>
-                        <div className="font-semibold">{task.title}</div>
-                        <div className="text-xs text-gray-500">
-                          Project: {projects.find(p => p.id === task.project_id)?.name || '-'}<br />
-                          Assigned: {users.find(u => u.id === task.assignment_id)?.name || '-'}
+                  {sortedTasks.map((task) => {
+                    const isOverdue = task.due_date && new Date(task.due_date) < new Date() && task.status !== 'done';
+                    return (
+                      <li key={task.id} className={`flex items-center gap-3 ${isOverdue ? 'bg-red-50' : ''}`}>
+                        <div className="w-8 h-8 rounded-full bg-orange-200 text-orange-800 flex items-center justify-center font-bold text-base">
+                          {task.title?.[0] || '?'}
                         </div>
-                      </div>
-                      <div className="ml-auto text-xs text-gray-700">
-                        Due: {task.due_date || '-'}
-                      </div>
-                    </li>
-                  ))}
+                        <div>
+                          <div className="font-semibold">{task.title}</div>
+                          <div className="text-xs text-gray-500">
+                            Project: {projects.find(p => p.id === task.project_id)?.name || '-'}<br />
+                            Assigned: {users.find(u => u.id === task.assignment_id)?.name || '-'}
+                          </div>
+                        </div>
+                        <div className={`ml-auto text-xs ${isOverdue ? 'text-red-700 font-bold' : 'text-gray-700'}`}>
+                          Due: {task.due_date || '-'}
+                          {isOverdue && <span className="ml-2 text-xs bg-red-200 text-red-800 px-2 py-0.5 rounded">Overdue</span>}
+                        </div>
+                      </li>
+                    );
+                  })}
                 </ul>
               )}
             </div>

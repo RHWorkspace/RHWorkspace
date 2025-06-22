@@ -30,18 +30,63 @@ function getWeekNumber(date) {
     return Math.ceil((((d - yearStart) / 86400000) + 1)/7);
 }
 
+function getUserWorkSummary(tasks) {
+    const activeTasks = tasks.filter(
+        t => t.status === 'in_progress' && t.estimated_hours && t.due_date
+    );
+    const totalHours = activeTasks.reduce((sum, t) => sum + Number(t.estimated_hours || 0), 0);
+    const totalRemaining = activeTasks.reduce(
+        (sum, t) =>
+            sum +
+            (typeof t.remaining_hours !== 'undefined' && t.remaining_hours !== null
+                ? Number(t.remaining_hours)
+                : Number(t.estimated_hours || 0)),
+        0
+    );
+    const dailyCapacity = 8;
+    const weeklyCapacity = dailyCapacity * 5;
+    const now = new Date();
+    const availableHours = Math.max(0, weeklyCapacity - totalRemaining);
+
+    // Next available (hanya hari kerja)
+    let sisa = totalRemaining;
+    let current = new Date(now);
+    let availableDate = null;
+    if (sisa === 0) {
+        availableDate = now;
+    } else {
+        while (sisa > 0) {
+            if (current.getDay() >= 1 && current.getDay() <= 5) {
+                sisa -= dailyCapacity;
+                if (sisa <= 0) {
+                    availableDate = new Date(current);
+                    break;
+                }
+            }
+            current.setDate(current.getDate() + 1);
+        }
+    }
+    return {
+        totalHours,
+        availableHours,
+        availableDate,
+    };
+}
+
 export default function Dashboard() {
     const { auth } = usePage().props;
     const [users, setUsers] = useState([]);
-    const [workload, setWorkload] = useState([]);
-    const [filterUser, setFilterUser] = useState('');
-    const [filterStatus, setFilterStatus] = useState('');
-    const [filterProject, setFilterProject] = useState('');
-    const [filterAvailable, setFilterAvailable] = useState(''); // sudah ada
     const [projects, setProjects] = useState([]);
     const [tasks, setTasks] = useState([]);
 
+    const [filterUser, setFilterUser] = useState('');
+    const [filterStatus, setFilterStatus] = useState('');
+    const [filterProject, setFilterProject] = useState('');
+    const [filterAvailable, setFilterAvailable] = useState('');
     const [statusClickFilter, setStatusClickFilter] = useState({ userId: null, status: null });
+
+    const [showTaskList, setShowTaskList] = useState({});
+    const [showAllTaskList, setShowAllTaskList] = useState(false);
 
     useEffect(() => {
         axios.get('/users').then(res => setUsers(res.data || []));
@@ -49,7 +94,6 @@ export default function Dashboard() {
         axios.get('/tasks').then(res => setTasks(res.data || []));
     }, []);
 
-    // Filtering tasks sesuai filter global
     const filteredTasks = tasks.filter(task => {
         let match = true;
         if (filterUser) match = match && String(task.assignment_id) === String(filterUser);
@@ -58,58 +102,63 @@ export default function Dashboard() {
         return match;
     });
 
-    // Group tasks by assignment_id
-    const grouped = {};
-    filteredTasks.forEach(task => {
-        if (!grouped[task.assignment_id]) grouped[task.assignment_id] = [];
-        grouped[task.assignment_id].push(task);
-    });
+    const workload = users.map(user => {
+        const userTasks = filteredTasks.filter(task => String(task.assignment_id) === String(user.id));
+        const now = new Date();
+        const overload = isUserOverloadWeekly(userTasks);
+        const { totalHours, availableHours, availableDate } = getUserWorkSummary(userTasks);
 
-    // Build workload per user
-    useEffect(() => {
-        setWorkload(
-            users.map(user => {
-                const userTasks = grouped[user.id] || [];
-                const now = new Date();
-                const overload = isUserOverloadWeekly(userTasks); // overload mingguan
-                return {
-                    user,
-                    total: userTasks.length,
-                    todo: userTasks.filter(t => t.status === 'todo').length,
-                    in_progress: userTasks.filter(t => t.status === 'in_progress').length,
-                    done: userTasks.filter(t => t.status === 'done').length,
-                    overdue: userTasks.filter(t =>
-                        (t.status !== 'done') &&
-                        t.due_date &&
-                        new Date(t.due_date) < now
-                    ).length,
-                    overload, // <-- flag overload mingguan
-                    tasks: userTasks,
-                };
-            })
-            .filter(w => w.total > 0 || (!filterUser && !filterStatus && !filterProject))
-            .sort((a, b) => b.total - a.total) // Urutkan dari jumlah task terbanyak ke terkecil
-        );
-        // eslint-disable-next-line
-    }, [users, filteredTasks, filterUser, filterStatus, filterProject]);
+        return {
+            user,
+            total: userTasks.length,
+            todo: userTasks.filter(t => t.status === 'todo').length,
+            in_progress: userTasks.filter(t => t.status === 'in_progress').length,
+            done: userTasks.filter(t => t.status === 'done').length,
+            overdue: userTasks.filter(t =>
+                (t.status !== 'done') &&
+                t.due_date &&
+                new Date(t.due_date) < now
+            ).length,
+            overload,
+            tasks: userTasks,
+            totalHours,
+            availableHours,
+            availableDate,
+        };
+    })
+    .filter(w => w.total > 0 || (!filterUser && !filterStatus && !filterProject))
+    .sort((a, b) => b.total - a.total);
 
-    // Filter workload by available if needed
     const filteredWorkload = workload.filter(w => {
         if (filterAvailable === 'available') {
-            // Available: tidak ada task in_progress
             return w.in_progress === 0;
         }
         if (filterAvailable === 'busy') {
-            // Busy: ada task in_progress
             return w.in_progress > 0;
         }
         if (filterAvailable === 'overload') {
-            // Overload: overload mingguan
             return w.overload === true;
         }
         return true;
     });
 
+    // Sinkronkan showAllTaskList dengan showTaskList semua user
+    useEffect(() => {
+        const newShowTaskList = {};
+        if (showAllTaskList) {
+            filteredWorkload.forEach(w => {
+                newShowTaskList[w.user?.id] = true;
+            });
+        } else {
+            filteredWorkload.forEach(w => {
+                newShowTaskList[w.user?.id] = false;
+            });
+        }
+        setShowTaskList(newShowTaskList);
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [showAllTaskList, filteredWorkload.length]);
+
+    // Untuk filter status per card
     const getFilteredTasks = (w) => {
         if (
             statusClickFilter.userId === w.user?.id &&
@@ -129,142 +178,141 @@ export default function Dashboard() {
         return w.tasks;
     };
 
-    const isActive = (w, status) =>
-        statusClickFilter.userId === w.user?.id && statusClickFilter.status === status;
-
-    const handleResetStatusClick = () => setStatusClickFilter({ userId: null, status: null });
-
-    const goToTaskPageWithMember = (userId) => {
-        router.get(`/tasks-page?assignment=${userId}`);
-    };
-
-    // Cari member overload
-    const overloadMembers = filteredWorkload.filter(w => w.overload);
-
     return (
-        <AuthenticatedLayout
-            header={
-                <h2 className="text-xl font-semibold leading-tight text-gray-800">
-                    Dashboard
-                </h2>
-            }
-        >
+        <AuthenticatedLayout auth={auth}>
             <Head title="Dashboard" />
+            <div className="container mx-auto px-4">
+                <div className="py-8">
+                    <h1 className="text-2xl font-bold mb-4">Dashboard</h1>
 
-            <div className="py-12">
-                <div className="mx-auto max-w-7xl sm:px-6 lg:px-8">
-                    {/* Notifikasi jika ada member overload */}
-                    {overloadMembers.length > 0 && (
-                        <div className="my-6 p-4 bg-red-100 border border-red-300 text-red-800 rounded-lg shadow flex items-center gap-3">
-                            <svg className="w-6 h-6 text-red-500" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
-                                <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v2m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                            </svg>
-                            <div>
-                                <b>Warning:</b> {overloadMembers.length} member{overloadMembers.length > 1 ? 's are' : ' is'} overload (&gt;40 jam/minggu):{' '}
-                                {overloadMembers.map(w => w.user?.name).filter(Boolean).join(', ')}
-                            </div>
-                        </div>
-                    )}
-
-                    {/* Filter */}
-                    <div className="mt-8 mb-6 flex flex-wrap gap-4 items-end">
+                    {/* Filter Section */}
+                    <div className="bg-white shadow rounded-lg p-4 mb-4 flex flex-wrap gap-4 items-end">
+                        {/* User Filter */}
                         <div>
-                            <label className="block text-sm font-semibold text-gray-700 mb-1">User</label>
+                            <label className="block text-sm font-medium text-gray-700 mb-1">
+                                Filter by User
+                            </label>
                             <select
-                                className="border rounded px-3 py-2 min-w-[220px] max-w-xs"
                                 value={filterUser}
                                 onChange={e => setFilterUser(e.target.value)}
+                                className="block w-full bg-gray-50 border border-gray-300 rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500"
                             >
                                 <option value="">All Users</option>
-                                {users.map(u => (
-                                    <option key={u.id} value={u.id}>{u.name}</option>
+                                {users.map(user => (
+                                    <option key={user.id} value={user.id}>
+                                        {user.name}
+                                    </option>
                                 ))}
                             </select>
                         </div>
+                        {/* Status Filter */}
                         <div>
-                            <label className="block text-sm font-semibold text-gray-700 mb-1">Status</label>
+                            <label className="block text-sm font-medium text-gray-700 mb-1">
+                                Filter by Status
+                            </label>
                             <select
-                                className="border rounded px-3 py-2 min-w-[180px] max-w-xs"
                                 value={filterStatus}
                                 onChange={e => setFilterStatus(e.target.value)}
+                                className="block w-full bg-gray-50 border border-gray-300 rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500"
                             >
                                 <option value="">All Status</option>
-                                <option value="todo">To Do</option>
+                                <option value="todo">Todo</option>
                                 <option value="in_progress">In Progress</option>
                                 <option value="done">Done</option>
                             </select>
                         </div>
+                        {/* Project Filter */}
                         <div>
-                            <label className="block text-sm font-semibold text-gray-700 mb-1">Project</label>
+                            <label className="block text-sm font-medium text-gray-700 mb-1">
+                                Filter by Project
+                            </label>
                             <select
-                                className="border rounded px-3 py-2 min-w-[240px] max-w-xs"
                                 value={filterProject}
                                 onChange={e => setFilterProject(e.target.value)}
+                                className="block w-full bg-gray-50 border border-gray-300 rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500"
                             >
                                 <option value="">All Projects</option>
-                                {projects.map(p => (
-                                    <option key={p.id} value={p.id}>{p.name}</option>
+                                {projects.map(project => (
+                                    <option key={project.id} value={project.id}>
+                                        {project.name}
+                                    </option>
                                 ))}
                             </select>
                         </div>
+                        {/* Availability Filter */}
                         <div>
-                            <label className="block text-sm font-semibold text-gray-700 mb-1">Availability</label>
+                            <label className="block text-sm font-medium text-gray-700 mb-1">
+                                Filter by Availability
+                            </label>
                             <select
-                                className="border rounded px-3 py-2 min-w-[160px] max-w-xs"
                                 value={filterAvailable}
                                 onChange={e => setFilterAvailable(e.target.value)}
+                                className="block w-full bg-gray-50 border border-gray-300 rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500"
                             >
                                 <option value="">All</option>
                                 <option value="available">Available</option>
-                                <option value="busy">Busy (In Progress)</option>
-                                <option value="overload">Overload (&gt;40 jam/minggu)</option>
+                                <option value="busy">Busy</option>
+                                <option value="overload">Overload</option>
                             </select>
                         </div>
+                        {/* Show/Hide All Task List */}
+                        <div className="ml-auto">
+                            <button
+                                className="border rounded px-4 py-2 bg-gray-200 hover:bg-gray-300 text-gray-700 font-semibold transition"
+                                onClick={() => setShowAllTaskList(v => !v)}
+                                type="button"
+                            >
+                                {showAllTaskList ? 'Hide All Task List' : 'Show All Task List'}
+                            </button>
+                        </div>
                     </div>
-                    {/* Workload Info */}
-                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-                        {filteredWorkload.length === 0 && (
-                            <div className="col-span-4 text-center text-gray-400 py-8">
-                                No tasks found.
-                            </div>
-                        )}
+
+                    {/* Workload Summary Section */}
+                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
                         {filteredWorkload.map((w, idx) => {
                             const filteredTasks = getFilteredTasks(w);
                             const showMore = filteredTasks.length > 5;
-                            const isAllDoneOrTodo = (w.in_progress === 0);
+                            const isShow = showTaskList[w.user?.id] ?? false;
+
+                            // Fungsi untuk handle klik status dan tampilkan list task pada card ini
+                            const handleStatusClick = (status) => {
+                                setStatusClickFilter({ userId: w.user?.id, status });
+                                setShowTaskList(prev => ({
+                                    ...prev,
+                                    [w.user?.id]: true,
+                                }));
+                            };
+
+                            // Card color logic
+                            let cardColor = "bg-white border-gray-100";
+                            if (w.overload) {
+                                cardColor = "bg-gradient-to-br from-red-100 to-red-50 border-red-300";
+                            } else if (w.in_progress === 0) {
+                                // Available (tidak ada in_progress)
+                                cardColor = "bg-gradient-to-br from-green-100 to-green-50 border-green-300";
+                            } else {
+                                // Not available (ada in_progress)
+                                cardColor = "bg-gradient-to-br from-yellow-50 to-blue-50 border-yellow-200";
+                            }
+
                             return (
                                 <div
-                                    key={w.user?.id || idx}
-                                    className={`rounded-lg shadow p-4 ${
-                                        w.overload
-                                            ? 'bg-red-50 border border-red-300'
-                                            : isAllDoneOrTodo
-                                            ? 'bg-green-50 border border-green-200'
-                                            : 'bg-white'
-                                    }`}
-                                    style={{ minWidth: 0 }}
+                                    key={w.user.id}
+                                    className={`p-4 rounded-lg shadow-md border ${cardColor}`}
                                 >
-                                    <div className="flex items-center gap-3 mb-3">
-                                        <div className={`rounded-full w-9 h-9 flex items-center justify-center text-lg font-bold ${
-                                            w.overload
-                                                ? 'bg-red-200 text-red-800'
-                                                : isAllDoneOrTodo
-                                                ? 'bg-green-200 text-green-800'
-                                                : 'bg-blue-100 text-blue-700'
-                                        }`}>
-                                            {w.user?.name?.[0] || '-'}
+                                    <div className="flex items-center mb-2">
+                                        <div className="h-10 w-10 rounded-full overflow-hidden mr-3 bg-gray-200 flex items-center justify-center">
+                                            <span className="font-bold text-lg text-gray-700">
+                                                {w.user.name?.[0] || '-'}
+                                            </span>
                                         </div>
                                         <div>
-                                            <button
-                                                className="font-bold text-base text-blue-800 hover:underline focus:outline-none bg-transparent p-0 m-0"
-                                                style={{ cursor: 'pointer' }}
-                                                onClick={() => goToTaskPageWithMember(w.user?.id)}
-                                                type="button"
-                                                title={`Lihat semua task ${w.user?.name}`}
-                                            >
-                                                {w.user?.name || 'Unknown'}
-                                            </button>
-                                            <div className="text-gray-500 text-xs">{w.user?.email}</div>
+                                            <p className="text-sm font-medium text-gray-800">
+                                                {w.user.name}
+                                            </p>
+                                            <p className="text-xs text-gray-500">
+                                                {w.user.email}
+                                            </p>
                                             {w.overload && (
                                                 <div className="text-xs text-red-600 font-bold">
                                                     Overload (&gt;40 jam/minggu)
@@ -272,119 +320,156 @@ export default function Dashboard() {
                                             )}
                                         </div>
                                     </div>
-                                    <div className="grid grid-cols-5 gap-1 mb-3">
+
+                                    {/* Status summary dengan onclick */}
+                                    <div className="flex flex-wrap gap-2 mb-4">
                                         <button
-                                            className={`bg-blue-50 rounded p-2 text-center w-full focus:outline-none ${isActive(w, 'total') ? 'ring-2 ring-blue-400' : ''}`}
-                                            onClick={() => setStatusClickFilter({ userId: w.user?.id, status: null })}
                                             type="button"
-                                            title="Show all tasks"
+                                            className="bg-blue-100 text-blue-800 px-2 py-1 rounded text-xs font-semibold hover:bg-blue-200 transition"
+                                            onClick={() => handleStatusClick(null)}
                                         >
-                                            <div className="text-base font-bold text-blue-700">{w.total}</div>
-                                            <div className="text-gray-600 text-[11px]">Total</div>
+                                            Total: {w.total}
                                         </button>
                                         <button
-                                            className={`bg-yellow-50 rounded p-2 text-center w-full focus:outline-none ${isActive(w, 'todo') ? 'ring-2 ring-yellow-400' : ''}`}
-                                            onClick={() => setStatusClickFilter({ userId: w.user?.id, status: 'todo' })}
                                             type="button"
-                                            title="Show To Do"
+                                            className="bg-yellow-100 text-yellow-800 px-2 py-1 rounded text-xs font-semibold hover:bg-yellow-200 transition"
+                                            onClick={() => handleStatusClick('todo')}
                                         >
-                                            <div className="text-base font-bold text-yellow-600">{w.todo}</div>
-                                            <div className="text-gray-600 text-[11px]">To Do</div>
+                                            To Do: {w.todo}
                                         </button>
                                         <button
-                                            className={`bg-orange-50 rounded p-2 text-center w-full focus:outline-none ${isActive(w, 'in_progress') ? 'ring-2 ring-orange-400' : ''}`}
-                                            onClick={() => setStatusClickFilter({ userId: w.user?.id, status: 'in_progress' })}
                                             type="button"
-                                            title="Show In Progress"
+                                            className="bg-orange-100 text-orange-800 px-2 py-1 rounded text-xs font-semibold hover:bg-orange-200 transition"
+                                            onClick={() => handleStatusClick('in_progress')}
                                         >
-                                            <div className="text-base font-bold text-orange-600">{w.in_progress}</div>
-                                            <div className="text-gray-600 text-[11px]">In Progress</div>
+                                            In Progress: {w.in_progress}
                                         </button>
                                         <button
-                                            className={`bg-green-50 rounded p-2 text-center w-full focus:outline-none ${isActive(w, 'done') ? 'ring-2 ring-green-400' : ''}`}
-                                            onClick={() => setStatusClickFilter({ userId: w.user?.id, status: 'done' })}
                                             type="button"
-                                            title="Show Done"
+                                            className="bg-green-100 text-green-800 px-2 py-1 rounded text-xs font-semibold hover:bg-green-200 transition"
+                                            onClick={() => handleStatusClick('done')}
                                         >
-                                            <div className="text-base font-bold text-green-600">{w.done}</div>
-                                            <div className="text-gray-600 text-[11px]">Done</div>
+                                            Done: {w.done}
                                         </button>
                                         <button
-                                            className={`bg-red-50 rounded p-2 text-center w-full focus:outline-none ${isActive(w, 'overdue') ? 'ring-2 ring-red-400' : ''}`}
-                                            onClick={() => setStatusClickFilter({ userId: w.user?.id, status: 'overdue' })}
                                             type="button"
-                                            title="Show Overdue"
+                                            className="bg-red-100 text-red-800 px-2 py-1 rounded text-xs font-semibold hover:bg-red-200 transition"
+                                            onClick={() => handleStatusClick('overdue')}
                                         >
-                                            <div className="text-base font-bold text-red-600">{w.overdue}</div>
-                                            <div className="text-gray-600 text-[11px]">Overdue</div>
+                                            Overdue: {w.overdue}
                                         </button>
-                                    </div>
-                                    {(statusClickFilter.userId === w.user?.id && statusClickFilter.status) && (
-                                        <button
-                                            className="mb-2 text-xs text-blue-600 underline"
-                                            onClick={handleResetStatusClick}
-                                            type="button"
-                                        >
-                                            Show all tasks
-                                        </button>
-                                    )}
-                                    <div className="overflow-x-auto">
-                                        <table className="min-w-full bg-white rounded shadow text-xs">
-                                            <thead>
-                                                <tr className="bg-gray-100 text-gray-700">
-                                                    <th className="py-1 px-2 text-left">Title</th>
-                                                    <th className="py-1 px-2 text-left">Project</th>
-                                                    <th className="py-1 px-2 text-left">Status</th>
-                                                    <th className="py-1 px-2 text-left">Due</th>
-                                                    <th className="py-1 px-2 text-left">Est. Hours</th> {/* Tambahkan kolom ini */}
-                                                </tr>
-                                            </thead>
-                                            <tbody>
-                                                {filteredTasks.length === 0 && (
-                                                    <tr>
-                                                        <td colSpan={5} className="text-center py-2 text-gray-400">No tasks.</td>
-                                                    </tr>
-                                                )}
-                                                {filteredTasks.slice(0, 5).map(task => (
-                                                    <tr key={task.id} className="border-t">
-                                                        <td className="py-1 px-2">{task.title}</td>
-                                                        <td className="py-1 px-2">{projects.find(p => p.id === task.project_id)?.name || '-'}</td>
-                                                        <td className="py-1 px-2">
-                                                            <span className={
-                                                                task.status === 'done'
-                                                                    ? 'bg-green-100 text-green-700 px-2 py-0.5 rounded-full text-[10px] font-semibold'
-                                                                    : task.status === 'in_progress'
-                                                                    ? 'bg-yellow-100 text-yellow-700 px-2 py-0.5 rounded-full text-[10px] font-semibold'
-                                                                    : 'bg-gray-100 text-gray-700 px-2 py-0.5 rounded-full text-[10px] font-semibold'
-                                                            }>
-                                                                {task.status ? task.status.replace('_', ' ').replace(/\b\w/g, c => c.toUpperCase()) : '-'}
-                                                            </span>
-                                                        </td>
-                                                        <td className={`py-1 px-2 ${task.status !== 'done' && task.due_date && new Date(task.due_date) < new Date() ? 'text-red-600 font-bold' : ''}`}>
-                                                            {task.due_date || '-'}
-                                                        </td>
-                                                        <td className="py-1 px-2">
-                                                            {typeof task.estimated_hours !== 'undefined' && task.estimated_hours !== null && task.estimated_hours !== ''
-                                                                ? Number(task.estimated_hours).toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 2 }) + ' jam'
-                                                                : <span className="text-gray-400">-</span>
-                                                            }
-                                                        </td>
-                                                    </tr>
-                                                ))}
-                                            </tbody>
-                                        </table>
-                                        {showMore && (
-                                            <div className="mt-2 text-right">
-                                                <button
-                                                    className="text-xs text-blue-600 underline"
-                                                    onClick={() => goToTaskPageWithMember(w.user?.id)}
-                                                    type="button"
-                                                >
-                                                    Show more
-                                                </button>
-                                            </div>
+                                        {isShow && (
+                                            <button
+                                                type="button"
+                                                className="bg-gray-200 text-gray-700 px-2 py-1 rounded text-xs font-semibold hover:bg-gray-300 transition ml-auto"
+                                                onClick={() =>
+                                                    setShowTaskList(prev => ({
+                                                        ...prev,
+                                                        [w.user?.id]: false,
+                                                    }))
+                                                }
+                                            >
+                                                Hide List Task
+                                            </button>
                                         )}
                                     </div>
+
+                                    {/* Jam kerja */}
+                                    <div className="mt-4">
+                                        <div className="text-xs font-medium text-gray-500 mb-1">
+                                            Working Hours:
+                                        </div>
+                                        <div className="flex items-center mb-1">
+                                            <div className="w-full bg-gray-200 rounded-full h-2.5 mr-2">
+                                                <div
+                                                    className="bg-indigo-600 h-2.5 rounded-full"
+                                                    style={{
+                                                        width: `${Math.min((w.totalHours / 40) * 100, 100)}%`
+                                                    }}
+                                                ></div>
+                                            </div>
+                                            <span className="text-xs font-semibold text-indigo-700">
+                                                {w.totalHours.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 2 })} jam
+                                            </span>
+                                        </div>
+                                        <div className="flex items-center mb-1">
+                                            <span className="text-xs font-medium text-gray-500 mr-2">Available Hours:</span>
+                                            <span className="text-xs font-semibold text-green-700">
+                                                {w.availableHours.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 2 })} jam
+                                            </span>
+                                        </div>
+                                        <div className="flex items-center">
+                                            <span className="text-xs font-medium text-gray-500 mr-2">Next Available:</span>
+                                            <span className="text-xs font-semibold text-yellow-700">
+                                                {w.availableDate
+                                                    ? w.availableDate.toLocaleDateString('id-ID')
+                                                    : '-'}
+                                            </span>
+                                        </div>
+                                    </div>
+
+                                    {/* List Task */}
+                                    {isShow && (
+                                        <div className="overflow-x-auto rounded-lg border border-gray-100 bg-white shadow-inner mt-2">
+                                            <table className="min-w-full text-xs">
+                                                <thead>
+                                                    <tr className="bg-gray-50 text-gray-700">
+                                                        <th className="py-2 px-2 text-left font-semibold">Title</th>
+                                                        <th className="py-2 px-2 text-left font-semibold">Project</th>
+                                                        <th className="py-2 px-2 text-left font-semibold">Status</th>
+                                                        <th className="py-2 px-2 text-left font-semibold">Due</th>
+                                                        <th className="py-2 px-2 text-left font-semibold">Est. Hours</th>
+                                                    </tr>
+                                                </thead>
+                                                <tbody>
+                                                    {filteredTasks.length === 0 && (
+                                                        <tr>
+                                                            <td colSpan={5} className="text-center py-3 text-gray-400">No tasks.</td>
+                                                        </tr>
+                                                    )}
+                                                    {filteredTasks.length > 0 &&
+                                                        filteredTasks.slice(0, 5).map(task => (
+                                                            <tr key={task.id} className="border-t hover:bg-blue-50 transition">
+                                                                <td className="py-2 px-2">{task.title}</td>
+                                                                <td className="py-2 px-2">{projects.find(p => p.id === task.project_id)?.name || '-'}</td>
+                                                                <td className="py-2 px-2">
+                                                                    <span className={
+                                                                        task.status === 'done'
+                                                                            ? 'bg-green-100 text-green-700 px-2 py-0.5 rounded-full text-[10px] font-semibold'
+                                                                            : task.status === 'in_progress'
+                                                                            ? 'bg-yellow-100 text-yellow-700 px-2 py-0.5 rounded-full text-[10px] font-semibold'
+                                                                            : 'bg-gray-100 text-gray-700 px-2 py-0.5 rounded-full text-[10px] font-semibold'
+                                                                    }>
+                                                                        {task.status ? task.status.replace('_', ' ').replace(/\b\w/g, c => c.toUpperCase()) : '-'}
+                                                                    </span>
+                                                                </td>
+                                                                <td className={`py-2 px-2 ${task.status !== 'done' && task.due_date && new Date(task.due_date) < new Date() ? 'text-red-600 font-bold' : ''}`}>
+                                                                    {task.due_date || '-'}
+                                                                </td>
+                                                                <td className="py-2 px-2">
+                                                                    {typeof task.estimated_hours !== 'undefined' && task.estimated_hours !== null && task.estimated_hours !== ''
+                                                                        ? Number(task.estimated_hours).toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 2 }) + ' jam'
+                                                                        : <span className="text-gray-400">-</span>
+                                                                    }
+                                                                </td>
+                                                            </tr>
+                                                        ))
+                                                    }
+                                                </tbody>
+                                            </table>
+                                            {showMore && (
+                                                <div className="mt-2 text-right">
+                                                    <button
+                                                        className="text-xs text-blue-600 underline"
+                                                        onClick={() => router.get(`/tasks-page?assignment=${w.user?.id}`)}
+                                                        type="button"
+                                                    >
+                                                        Show more
+                                                    </button>
+                                                </div>
+                                            )}
+                                        </div>
+                                    )}
                                 </div>
                             );
                         })}

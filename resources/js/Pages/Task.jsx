@@ -3,6 +3,8 @@ import axios from 'axios';
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout';
 import { Head, usePage } from '@inertiajs/react';
 import { Transition } from '@headlessui/react';
+import * as XLSX from 'xlsx'; // Tambahkan import ini
+
 
 const priorities = [
   { value: 'low', label: 'Low' },
@@ -385,6 +387,54 @@ export default function Task() {
     return users;
   };
 
+  // Tambahkan fungsi export ke Excel
+  const handleExportExcel = () => {
+    // Gabungkan parent dan subtask
+    const exportData = [];
+    filteredTasks
+      .filter(t => !t.parent_id)
+      .forEach((task, idx) => {
+        exportData.push({
+          No: idx + 1,
+          Title: task.title,
+          Project: getProject(task.project_id)?.name || '-',
+          Assignment: getUser(task.assignment_id)?.name || '-',
+          Priority: task.priority,
+          Status: task.status,
+          'Start Date': task.start_date,
+          'Due Date': task.due_date,
+          'Completed At': task.completed_at,
+          'Estimated Hours': task.estimated_hours,
+          'Link Issue': task.link_issue,
+          'Parent?': '-',
+        });
+        // Subtasks
+        filteredTasks
+          .filter(sub => sub.parent_id === task.id)
+          .forEach((sub, subIdx) => {
+            exportData.push({
+              No: `${idx + 1}.${subIdx + 1}`,
+              Title: sub.title,
+              Project: getProject(sub.project_id)?.name || '-',
+              Assignment: getUser(sub.assignment_id)?.name || '-',
+              Priority: sub.priority,
+              Status: sub.status,
+              'Start Date': sub.start_date,
+              'Due Date': sub.due_date,
+              'Completed At': sub.completed_at,
+              'Estimated Hours': sub.estimated_hours,
+              'Link Issue': sub.link_issue,
+              'Parent?': task.title,
+            });
+          });
+      });
+
+    const ws = XLSX.utils.json_to_sheet(exportData);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, 'Tasks');
+    XLSX.writeFile(wb, 'tasks.xlsx');
+  };
+
   return (
     <AuthenticatedLayout
       header={
@@ -459,13 +509,23 @@ export default function Task() {
             <svg className="w-6 h-6 text-blue-400" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M9 12h6m-3-3v6m9-6a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
             Task List
           </h2>
-          <button
-            onClick={handleAddTask}
-            className="bg-gradient-to-r from-blue-500 to-blue-700 text-white px-6 py-2 rounded-xl hover:from-blue-600 hover:to-blue-800 transition font-bold shadow flex items-center gap-2"
-          >
-            <svg className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" /></svg>
-            Add Task
-          </button>
+          <div className="flex gap-2">
+            {/* Tambahkan tombol Download Excel */}
+            <button
+              onClick={handleExportExcel}
+              className="bg-gradient-to-r from-green-400 to-green-600 text-white px-5 py-2 rounded-xl hover:from-green-500 hover:to-green-700 transition font-bold shadow flex items-center gap-2"
+            >
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M4 16v2a2 2 0 002 2h12a2 2 0 002-2v-2M7 10l5 5 5-5M12 15V3" /></svg>
+              Download Excel
+            </button>
+            <button
+              onClick={handleAddTask}
+              className="bg-gradient-to-r from-blue-500 to-blue-700 text-white px-6 py-2 rounded-xl hover:from-blue-600 hover:to-blue-800 transition font-bold shadow flex items-center gap-2"
+            >
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" /></svg>
+              Add Task
+            </button>
+          </div>
         </div>
         {error && (
           <Transition
