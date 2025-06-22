@@ -167,13 +167,21 @@ export default function Users() {
     setPage(1);
   };
 
+  // Toast auto close
+  useEffect(() => {
+    if (toast.show) {
+      const t = setTimeout(() => setToast({ ...toast, show: false }), 2500);
+      return () => clearTimeout(t);
+    }
+  }, [toast]);
+
   return (
     <AuthenticatedLayout user={auth.user}>
       <Head title="Manage Users" />
       {/* Loading Overlay */}
       {loading && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-30">
-          <div className="bg-white rounded-full p-6 shadow-lg flex flex-col items-center">
+          <div className="bg-white rounded-full p-6 shadow-lg flex flex-col items-center animate-bounceIn">
             <svg className="animate-spin h-8 w-8 text-blue-500 mb-2" viewBox="0 0 24 24">
               <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none"/>
               <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z"/>
@@ -184,13 +192,22 @@ export default function Users() {
       )}
 
       {/* Toast Notification */}
-      {toast.show && (
-        <div className={`fixed top-6 right-6 z-50 px-6 py-3 rounded shadow-lg text-white font-semibold transition-all
-          ${toast.type === 'success' ? 'bg-green-600' : 'bg-red-600'}`}>
+      <div className={`fixed top-6 right-6 z-50 transition-all duration-500 ${toast.show ? 'opacity-100 translate-y-0' : 'opacity-0 -translate-y-4 pointer-events-none'}`}>
+        <div className={`px-6 py-3 rounded shadow-lg text-white font-semibold flex items-center gap-2
+          ${toast.type === 'success' ? 'bg-gradient-to-r from-green-500 to-green-700' : 'bg-gradient-to-r from-red-500 to-red-700'}`}>
+          {toast.type === 'success' ? (
+            <svg className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+            </svg>
+          ) : (
+            <svg className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+            </svg>
+          )}
           {toast.message}
           <button className="ml-4 text-white font-bold" onClick={() => setToast({ ...toast, show: false })}>×</button>
         </div>
-      )}
+      </div>
 
       <div className="max-w-6xl mx-auto py-8">
         <h1 className="text-2xl font-bold mb-6 flex items-center gap-2">
@@ -198,14 +215,14 @@ export default function Users() {
             <path strokeLinecap="round" strokeLinejoin="round" d="M17 20h5v-2a4 4 0 00-3-3.87M9 20H4v-2a4 4 0 013-3.87m9-4a4 4 0 10-8 0 4 4 0 008 0zm6 4a4 4 0 00-3-3.87M9 16a4 4 0 00-3 3.87" />
           </svg>
           Manage Users
-          <span className="ml-2 bg-blue-100 text-blue-700 px-3 py-1 rounded-full text-xs font-bold">
+          <span className="ml-2 bg-gradient-to-r from-blue-400 to-blue-600 text-white px-3 py-1 rounded-full text-xs font-bold shadow">
             {users.length} users
           </span>
         </h1>
         <div className="mb-4 flex flex-wrap items-center gap-2">
           <input
             type="text"
-            className="border border-gray-300 rounded px-3 py-2 w-full max-w-xs focus:ring-2 focus:ring-blue-200"
+            className="border border-gray-300 rounded px-3 py-2 w-full max-w-xs focus:ring-2 focus:ring-blue-200 transition"
             placeholder="Search name or email..."
             value={search}
             onChange={e => {
@@ -214,7 +231,7 @@ export default function Users() {
             }}
           />
           <button
-            className="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700 transition"
+            className="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700 transition shadow"
             onClick={fetchUsers}
             disabled={loading}
             title="Refresh"
@@ -224,7 +241,7 @@ export default function Users() {
             </svg>
           </button>
           <button
-            className="bg-green-600 text-white px-4 py-2 rounded hover:bg-green-700 transition"
+            className="bg-gradient-to-r from-green-400 to-green-600 text-white px-4 py-2 rounded hover:from-green-500 hover:to-green-700 transition font-bold shadow"
             onClick={openAddModal}
             title="Add User"
           >
@@ -283,13 +300,14 @@ export default function Users() {
               {paginatedUsers.map((user, idx) => (
                 <tr
                   key={user.id}
-                  className={`transition-all duration-200 hover:bg-blue-50 ${idx % 2 === 1 ? 'bg-blue-50/30' : 'bg-white'} rounded-lg border border-blue-100`}
+                  className={`transition-all duration-200 hover:bg-blue-100/60 ${idx % 2 === 1 ? 'bg-blue-50/30' : 'bg-white'} rounded-lg border border-blue-100
+                    ${editId === user.id || showDeleteId === user.id ? 'ring-2 ring-blue-400/40' : ''}`}
                 >
                   <td className="py-3 px-4 rounded-s-lg font-semibold text-blue-900 align-middle">
                     {(page - 1) * perPage + idx + 1}
                   </td>
                   <td className="py-3 px-4 font-medium text-gray-800 flex items-center gap-3 align-middle">
-                    <span className={`inline-flex items-center justify-center w-9 h-9 rounded-full bg-gradient-to-br ${getAvatarColor(user.name)} text-white font-bold text-base shadow`}>
+                    <span className={`inline-flex items-center justify-center w-10 h-10 rounded-full bg-gradient-to-br ${getAvatarColor(user.name)} text-white font-bold text-base shadow-lg border-2 border-white`}>
                       {user.name?.[0]?.toUpperCase() || '-'}
                     </span>
                     <span className="text-base">{user.name}</span>
@@ -304,7 +322,7 @@ export default function Users() {
                   </td>
                   <td className="py-3 px-4 flex gap-2 rounded-e-lg align-middle">
                     <button
-                      className="p-2 rounded-full hover:bg-yellow-100 transition"
+                      className="p-2 rounded-full hover:bg-yellow-100 transition shadow"
                       onClick={() => openEditModal(user)}
                       title="Edit"
                     >
@@ -313,7 +331,7 @@ export default function Users() {
                       </svg>
                     </button>
                     <button
-                      className="p-2 rounded-full hover:bg-red-100 transition"
+                      className="p-2 rounded-full hover:bg-red-100 transition shadow"
                       onClick={() => setShowDeleteId(user.id)}
                       title="Delete"
                     >
@@ -331,31 +349,31 @@ export default function Users() {
         {totalPages > 1 && (
           <div className="flex justify-center items-center gap-2 mt-6">
             <button
-              className="px-3 py-1 rounded bg-gray-200 text-gray-700 hover:bg-gray-300"
+              className="px-3 py-1 rounded bg-gray-200 text-gray-700 hover:bg-gray-300 transition"
               onClick={() => setPage(1)}
               disabled={page === 1}
             >⏮ First</button>
             <button
-              className="px-3 py-1 rounded bg-gray-200 text-gray-700 hover:bg-gray-300"
+              className="px-3 py-1 rounded bg-gray-200 text-gray-700 hover:bg-gray-300 transition"
               onClick={() => setPage(page - 1)}
               disabled={page === 1}
             >Prev</button>
             {[...Array(totalPages)].map((_, i) => (
               <button
                 key={i}
-                className={`px-3 py-1 rounded ${page === i + 1 ? 'bg-blue-600 text-white' : 'bg-gray-100 text-gray-700 hover:bg-blue-100'}`}
+                className={`px-3 py-1 rounded transition font-bold ${page === i + 1 ? 'bg-blue-600 text-white shadow' : 'bg-gray-100 text-gray-700 hover:bg-blue-100'}`}
                 onClick={() => setPage(i + 1)}
               >
                 {i + 1}
               </button>
             ))}
             <button
-              className="px-3 py-1 rounded bg-gray-200 text-gray-700 hover:bg-gray-300"
+              className="px-3 py-1 rounded bg-gray-200 text-gray-700 hover:bg-gray-300 transition"
               onClick={() => setPage(page + 1)}
               disabled={page === totalPages}
             >Next</button>
             <button
-              className="px-3 py-1 rounded bg-gray-200 text-gray-700 hover:bg-gray-300"
+              className="px-3 py-1 rounded bg-gray-200 text-gray-700 hover:bg-gray-300 transition"
               onClick={() => setPage(totalPages)}
               disabled={page === totalPages}
             >Last ⏭</button>
@@ -369,11 +387,11 @@ export default function Users() {
       {/* Modal Add/Edit */}
       {showModal && (
         <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-40"
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-40 animate-fadeIn"
           onClick={closeModal}
         >
           <div
-            className="bg-white rounded-xl shadow-lg w-full max-w-md p-8 relative"
+            className="bg-white rounded-xl shadow-2xl w-full max-w-md p-8 relative animate-modalPop"
             onClick={e => e.stopPropagation()}
           >
             <button
@@ -393,7 +411,7 @@ export default function Users() {
                 <input
                   type="text"
                   name="name"
-                  className="w-full border border-blue-200 rounded px-4 py-2 focus:ring-2 focus:ring-blue-400 focus:outline-none"
+                  className="w-full border border-blue-200 rounded px-4 py-2 focus:ring-2 focus:ring-blue-400 focus:outline-none transition"
                   placeholder="Full name"
                   value={form.name}
                   onChange={handleFormChange}
@@ -406,7 +424,7 @@ export default function Users() {
                 <input
                   type="email"
                   name="email"
-                  className="w-full border border-blue-200 rounded px-4 py-2 focus:ring-2 focus:ring-blue-400 focus:outline-none"
+                  className="w-full border border-blue-200 rounded px-4 py-2 focus:ring-2 focus:ring-blue-400 focus:outline-none transition"
                   placeholder="Email"
                   value={form.email}
                   onChange={handleFormChange}
@@ -420,7 +438,7 @@ export default function Users() {
                 <input
                   type="password"
                   name="password"
-                  className="w-full border border-blue-200 rounded px-4 py-2 focus:ring-2 focus:ring-blue-400 focus:outline-none"
+                  className="w-full border border-blue-200 rounded px-4 py-2 focus:ring-2 focus:ring-blue-400 focus:outline-none transition"
                   placeholder={modalType === 'add' ? "Password" : "New password (optional)"}
                   value={form.password}
                   onChange={handleFormChange}
@@ -436,7 +454,7 @@ export default function Users() {
                   <input
                     type="password"
                     name="password_confirmation"
-                    className="w-full border border-blue-200 rounded px-4 py-2 focus:ring-2 focus:ring-blue-400 focus:outline-none"
+                    className="w-full border border-blue-200 rounded px-4 py-2 focus:ring-2 focus:ring-blue-400 focus:outline-none transition"
                     placeholder="Confirm password"
                     value={form.password_confirmation}
                     onChange={handleFormChange}
@@ -451,14 +469,14 @@ export default function Users() {
               <div className="flex gap-2 justify-end mt-6">
                 <button
                   type="button"
-                  className="bg-gray-100 text-gray-700 px-5 py-2 rounded hover:bg-gray-200 border border-gray-200"
+                  className="bg-gray-100 text-gray-700 px-5 py-2 rounded hover:bg-gray-200 border border-gray-200 transition"
                   onClick={closeModal}
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
-                  className="bg-blue-600 text-white px-7 py-2 rounded hover:bg-blue-700 font-bold shadow"
+                  className="bg-gradient-to-r from-blue-500 to-blue-700 text-white px-7 py-2 rounded hover:from-blue-600 hover:to-blue-800 font-bold shadow transition"
                 >
                   {modalType === 'add' ? 'Add' : 'Update'}
                 </button>
@@ -470,8 +488,8 @@ export default function Users() {
 
       {/* Modal Delete Confirmation */}
       {showDeleteId && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-40">
-          <div className="bg-white rounded-xl shadow-lg w-full max-w-sm p-6 relative">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-40 animate-fadeIn">
+          <div className="bg-white rounded-xl shadow-2xl w-full max-w-sm p-6 relative animate-modalPop">
             <button
               className="absolute top-3 right-4 text-gray-400 hover:text-gray-700 text-2xl font-bold focus:outline-none"
               onClick={() => setShowDeleteId(null)}
@@ -491,13 +509,13 @@ export default function Users() {
               <div className="flex gap-2 mt-4">
                 <button
                   onClick={() => setShowDeleteId(null)}
-                  className="bg-gray-200 text-gray-700 px-4 py-2 rounded hover:bg-gray-300"
+                  className="bg-gray-200 text-gray-700 px-4 py-2 rounded hover:bg-gray-300 transition"
                 >
                   Cancel
                 </button>
                 <button
                   onClick={() => handleDelete(showDeleteId)}
-                  className="bg-red-600 text-white px-6 py-2 rounded hover:bg-red-700 font-semibold"
+                  className="bg-gradient-to-r from-red-500 to-red-700 text-white px-6 py-2 rounded hover:from-red-600 hover:to-red-800 font-semibold shadow transition"
                 >
                   Delete
                 </button>
@@ -506,6 +524,15 @@ export default function Users() {
           </div>
         </div>
       )}
+      {/* Animations */}
+      <style>{`
+        @keyframes fadeIn { from { opacity: 0 } to { opacity: 1 } }
+        .animate-fadeIn { animation: fadeIn 0.3s; }
+        @keyframes modalPop { 0% { transform: scale(0.95); opacity: 0 } 100% { transform: scale(1); opacity: 1 } }
+        .animate-modalPop { animation: modalPop 0.25s; }
+        @keyframes bounceIn { 0% { transform: scale(0.8); opacity: 0.5 } 100% { transform: scale(1); opacity: 1 } }
+        .animate-bounceIn { animation: bounceIn 0.3s; }
+      `}</style>
     </AuthenticatedLayout>
   );
 }
