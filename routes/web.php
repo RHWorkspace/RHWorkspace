@@ -64,6 +64,11 @@ Route::middleware('auth')->group(function () {
     Route::put('/projects/{project}', [ProjectController::class, 'update']);
     Route::delete('/projects/{project}', [ProjectController::class, 'destroy']);
 
+    // Tambahkan endpoint untuk module project
+    Route::post('/projects/{project}/modules', [ProjectController::class, 'addModule']);
+    Route::put('/projects/{project}/modules/{module}', [ProjectController::class, 'updateModule']);
+    Route::delete('/projects/{project}/modules/{module}', [ProjectController::class, 'deleteModule']);
+
     // RESTful route untuk User (API style)
     Route::get('/users', [UserController::class, 'index']);
     Route::post('/users', [UserController::class, 'store']);

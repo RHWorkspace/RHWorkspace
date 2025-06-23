@@ -24,6 +24,7 @@ export default function Projects() {
   const [memberToAdd, setMemberToAdd] = useState('');
   const [memberError, setMemberError] = useState('');
   const [memberLoading, setMemberLoading] = useState(false);
+  const [showModules, setShowModules] = useState({});
 
   // Tambahkan state untuk semua tasks
   const [tasks, setTasks] = useState([]);
@@ -35,6 +36,18 @@ export default function Projects() {
 
   // Tambahkan state untuk show/hide member info per project
   const [showMembers, setShowMembers] = useState({});
+
+  // State untuk modal module
+  const [moduleModalProject, setModuleModalProject] = useState(null);
+  const [modules, setModules] = useState([]);
+  // Hapus desc dari state moduleForm
+  const [moduleForm, setModuleForm] = useState({ name: '' });
+  const [moduleError, setModuleError] = useState('');
+  const [moduleLoading, setModuleLoading] = useState(false);
+
+  // Tambahkan state untuk edit module
+  const [editingModuleId, setEditingModuleId] = useState(null);
+  const [editingModuleName, setEditingModuleName] = useState('');
 
   useEffect(() => {
     fetchProjects();
@@ -268,6 +281,96 @@ export default function Projects() {
       ...prev,
       [projectId]: !prev[projectId],
     }));
+  };
+
+  const toggleShowModules = (projectId) => {
+    setShowModules((prev) => ({
+      ...prev,
+      [projectId]: !prev[projectId],
+    }));
+  };
+
+  // Buka modal module
+  const openModuleModal = (project) => {
+    setModuleModalProject(project);
+    setModules(project.modules || []);
+    setModuleForm({ name: '' }); // Hapus desc
+    setModuleError('');
+  };
+
+  // Tutup modal module
+  const closeModuleModal = () => {
+    setModuleModalProject(null);
+    setModules([]);
+    setModuleForm({ name: '' }); // Hapus desc
+    setModuleError('');
+  };
+
+  // Tambah module
+  const handleAddModule = async () => {
+    if (!moduleForm.name) {
+      setModuleError('Module name is required.');
+      return;
+    }
+    setModuleLoading(true);
+    try {
+      // Kirim hanya name
+      const res = await axios.post(`/projects/${moduleModalProject.id}/modules`, { name: moduleForm.name });
+      setModules(res.data.project.modules);
+      setModuleForm({ name: '' }); // Hapus desc
+      setModuleError('');
+      fetchProjects(); // refresh project list
+    } catch {
+      setModuleError('Failed to add module.');
+    }
+    setModuleLoading(false);
+  };
+
+  const startEditModule = (mod) => {
+    setEditingModuleId(mod.id);
+    setEditingModuleName(mod.name);
+  };
+
+  const cancelEditModule = () => {
+    setEditingModuleId(null);
+    setEditingModuleName('');
+  };
+
+  const handleEditModule = async (modId) => {
+    if (!editingModuleName) {
+      setModuleError('Module name is required.');
+      return;
+    }
+    setModuleLoading(true);
+    try {
+      await axios.put(`/projects/${moduleModalProject.id}/modules/${modId}`, { name: editingModuleName });
+      // Refresh modules
+      const res = await axios.get(`/projects/${moduleModalProject.id}`);
+      setModules(res.data.modules);
+      setEditingModuleId(null);
+      setEditingModuleName('');
+      setModuleError('');
+      fetchProjects();
+    } catch {
+      setModuleError('Failed to update module.');
+    }
+    setModuleLoading(false);
+  };
+
+  const handleDeleteModule = async (modId) => {
+    if (!window.confirm('Delete this module? All related tasks will lose their module info.')) return;
+    setModuleLoading(true);
+    try {
+      await axios.delete(`/projects/${moduleModalProject.id}/modules/${modId}`);
+      // Refresh modules
+      const res = await axios.get(`/projects/${moduleModalProject.id}`);
+      setModules(res.data.modules);
+      setModuleError('');
+      fetchProjects();
+    } catch {
+      setModuleError('Failed to delete module.');
+    }
+    setModuleLoading(false);
   };
 
   return (
@@ -569,6 +672,143 @@ export default function Projects() {
         )}
         {/* End Modal Member Management */}
 
+        {/* Modal Manage Module */}
+        {moduleModalProject && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-40 transition-all">
+            <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg p-8 relative animate-fade-in border border-purple-100">
+              <button
+                className="absolute top-3 right-4 text-gray-400 hover:text-gray-700 text-3xl font-bold focus:outline-none"
+                onClick={closeModuleModal}
+                aria-label="Close"
+                type="button"
+              >
+                &times;
+              </button>
+              <h3 className="text-2xl font-extrabold mb-6 text-purple-700 flex items-center gap-2 tracking-tight">
+                Manage Modules - {moduleModalProject.name}
+              </h3>
+              <div className="mb-4">
+                <div className="font-semibold mb-2 text-gray-700">Current Modules:</div>
+                <div className="flex flex-col gap-2">
+                  {modules.length > 0 ? (
+                    modules.map((mod) => {
+                      // Summary bar per module
+                      const moduleTasks = tasks.filter(
+                        t => String(t.project_id) === String(moduleModalProject.id) && String(t.module_id) === String(mod.id)
+                      );
+                      const total = moduleTasks.length;
+                      const done = moduleTasks.filter(t => t.status === 'done').length;
+                      const percent = total === 0 ? 0 : Math.round((done / total) * 100);
+
+                      return (
+                        <div
+                          key={mod.id}
+                          className="flex flex-col gap-1 border border-purple-100 rounded-lg px-3 py-2 bg-purple-50"
+                        >
+                          <div className="flex items-center gap-2">
+                            {editingModuleId === mod.id ? (
+                              <>
+                                <input
+                                  type="text"
+                                  className="border border-purple-200 rounded px-2 py-1 text-sm"
+                                  value={editingModuleName}
+                                  onChange={e => setEditingModuleName(e.target.value)}
+                                  disabled={moduleLoading}
+                                />
+                                <button
+                                  className="text-green-600 font-bold px-1"
+                                  onClick={() => handleEditModule(mod.id)}
+                                  disabled={moduleLoading}
+                                  title="Save"
+                                  type="button"
+                                >✔</button>
+                                <button
+                                  className="text-gray-400 font-bold px-1"
+                                  onClick={cancelEditModule}
+                                  disabled={moduleLoading}
+                                  title="Cancel"
+                                  type="button"
+                                >✕</button>
+                              </>
+                            ) : (
+                              <>
+                                <span className="font-semibold">{mod.name}</span>
+                                <button
+                                  className="text-yellow-500 hover:text-yellow-700 text-xs underline ml-2"
+                                  onClick={() => startEditModule(mod)}
+                                  disabled={moduleLoading}
+                                  type="button"
+                                >
+                                  Edit
+                                </button>
+                                <button
+                                  className="text-red-500 hover:text-red-700 text-xs underline ml-2"
+                                  onClick={() => handleDeleteModule(mod.id)}
+                                  disabled={moduleLoading}
+                                  type="button"
+                                >
+                                  Delete
+                                </button>
+                              </>
+                            )}
+                          </div>
+                          {/* Bar summary per module */}
+                          <div className="flex items-center gap-2 mt-1">
+                            <span className="text-xs text-gray-600">Done:</span>
+                            <span className="text-xs font-bold text-purple-700">{percent}%</span>
+                            <div className="flex-1 h-2 bg-purple-100 rounded overflow-hidden">
+                              <div
+                                className="h-2 bg-gradient-to-r from-purple-400 to-purple-600 rounded"
+                                style={{ width: `${percent}%`, transition: 'width 0.4s' }}
+                              />
+                            </div>
+                            <span className="text-xs text-gray-500 ml-2">{done}/{total}</span>
+                          </div>
+                        </div>
+                      );
+                    })
+                  ) : (
+                    <span className="italic text-gray-400">No modules</span>
+                  )}
+                </div>
+              </div>
+              <div className="mb-4">
+                <div className="font-semibold mb-2 text-gray-700">Add Module:</div>
+                <div className="flex gap-2 flex-wrap items-center">
+                  <input
+                    type="text"
+                    className="border border-purple-200 rounded px-3 py-2 min-w-[160px]"
+                    placeholder="Module name"
+                    value={moduleForm.name}
+                    onChange={e => setModuleForm({ name: e.target.value })}
+                  />
+                  <button
+                    className="bg-purple-600 text-white px-4 py-2 rounded hover:bg-purple-700 transition font-semibold"
+                    onClick={handleAddModule}
+                    disabled={moduleLoading}
+                    type="button"
+                  >
+                    Add
+                  </button>
+                </div>
+                {moduleError && (
+                  <div className="mt-2 p-2 bg-red-100 text-red-700 rounded text-sm">{moduleError}</div>
+                )}
+              </div>
+              <div className="flex gap-2 mt-8 justify-end">
+                <button
+                  type="button"
+                  className="bg-gray-100 text-gray-700 px-5 py-2 rounded-xl hover:bg-gray-200 transition font-semibold border border-gray-200"
+                  onClick={closeModuleModal}
+                >
+                  Close
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+        {/* End Modal Manage Module */}
+
         {/* Card List */}
         <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-8">
           {projects.length === 0 && (
@@ -668,6 +908,61 @@ export default function Projects() {
                       <span className="bg-green-100 px-2 py-0.5 rounded-full">Done: <b>{stats.done}</b></span>
                       <span className="bg-red-100 px-2 py-0.5 rounded-full text-red-700">Overdue: <b>{stats.overdue}</b></span>
                     </div>
+                  </div>
+                  {/* Module Info */}
+                  <div className="mb-2">
+                    <div className="flex items-center gap-2 mb-1">
+                      <span className="font-semibold text-xs text-gray-700">Modules:</span>
+                      <button
+                        className="text-blue-500 underline hover:text-blue-700 text-xs"
+                        onClick={() => toggleShowModules(project.id)}
+                        type="button"
+                      >
+                        {showModules[project.id] ? 'Hide' : 'Show'}
+                      </button>
+                      <button
+                        className="text-blue-500 underline hover:text-blue-700 text-xs"
+                        onClick={() => openModuleModal(project)}
+                        type="button"
+                      >
+                        Manage
+                      </button>
+                    </div>
+                    {showModules[project.id] && (
+                      <div className="flex flex-col gap-1">
+                        {(project.modules || []).length > 0 ? (
+                          project.modules.map((mod) => {
+                            // Hitung summary task per module
+                            const moduleTasks = tasks.filter(
+                              t => String(t.project_id) === String(project.id) && String(t.module_id) === String(mod.id)
+                            );
+                            const total = moduleTasks.length;
+                            const done = moduleTasks.filter(t => t.status === 'done').length;
+                            const percent = total === 0 ? 0 : Math.round((done / total) * 100);
+
+                            return (
+                              <div key={mod.id} className="mb-1">
+                                <div className="flex items-center gap-2">
+                                  <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold border bg-purple-50 text-purple-700 border-purple-200">
+                                    {mod.name}
+                                  </span>
+                                  <span className="text-xs text-gray-500">{done}/{total} done</span>
+                                  <span className="text-xs text-purple-700 font-bold">{percent}%</span>
+                                </div>
+                                <div className="h-2 bg-purple-100 rounded overflow-hidden mt-1">
+                                  <div
+                                    className="h-2 bg-gradient-to-r from-purple-400 to-purple-600 rounded"
+                                    style={{ width: `${percent}%`, transition: 'width 0.4s' }}
+                                  />
+                                </div>
+                              </div>
+                            );
+                          })
+                        ) : (
+                          <span className="italic text-gray-400">No modules</span>
+                        )}
+                      </div>
+                    )}
                   </div>
                 </div>
                 <div className="flex gap-2 mt-4 justify-end">

@@ -7,7 +7,7 @@ use Illuminate\Database\Eloquent\Model;
 class Task extends Model
 {
     protected $fillable = [
-        'created_by',      // ganti user_id menjadi created_by
+        'created_by',
         'title',
         'description',
         'start_date',
@@ -16,10 +16,11 @@ class Task extends Model
         'priority',
         'completed_at',
         'status',
-        'assignment_id',   // assignment
-        'parent_id',       // parent task
-        'project_id',      // project id
-        'estimated_hours', // tambahkan kolom estimasi jam
+        'assignment_id',
+        'parent_id',
+        'project_id',
+        'estimated_hours',
+        'module_id', // tambahkan kolom module_id
     ];
 
     protected $dates = [
@@ -58,5 +59,11 @@ class Task extends Model
     public function project()
     {
         return $this->belongsTo(\App\Models\Project::class, 'project_id');
+    }
+
+    // Relasi ke module (ProjectModule)
+    public function module()
+    {
+        return $this->belongsTo(\App\Models\ProjectModule::class, 'module_id');
     }
 }

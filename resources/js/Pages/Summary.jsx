@@ -1,3 +1,4 @@
+import React from 'react';
 import { useEffect, useState } from 'react';
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout';
 import { Head, usePage } from '@inertiajs/react';
@@ -45,6 +46,10 @@ export default function Summary() {
   const [memberFilter, setMemberFilter] = useState('');
   const [statusFilter, setStatusFilter] = useState('');
   const [projectFilter, setProjectFilter] = useState('');
+  const [showModules, setShowModules] = useState({});
+  const [projectSummaryFilter, setProjectSummaryFilter] = useState('');
+  const [showMemberTasks, setShowMemberTasks] = useState({});
+  
 
   useEffect(() => {
     setLoading(true);
@@ -191,6 +196,13 @@ export default function Summary() {
     })),
   ].sort((a, b) => new Date(b.date) - new Date(a.date)).slice(0, 10);
 
+  const toggleShowModules = (projectId) => {
+    setShowModules((prev) => ({
+      ...prev,
+      [projectId]: !prev[projectId],
+    }));
+  };
+
   return (
     <AuthenticatedLayout header={
       <div className="flex items-center gap-3">
@@ -325,6 +337,48 @@ export default function Summary() {
                         </div>
                         <span className="text-xs text-gray-500 w-10 text-right">{percentDone}%</span>
                       </div>
+                      {/* MODULE INFO */}
+                      {Array.isArray(project.modules) && project.modules.length > 0 && (
+                        <div className="mt-1">
+                          <button
+                            className="text-blue-500 underline hover:text-blue-700 text-xs mb-1"
+                            onClick={() => toggleShowModules(project.id)}
+                            type="button"
+                          >
+                            {showModules[project.id] ? 'Hide Modules' : 'Show Modules'}
+                          </button>
+                          {showModules[project.id] && (
+                            <div className="flex flex-col gap-1">
+                              {project.modules.map(mod => {
+                                const moduleTasks = tasks.filter(
+                                  t => String(t.project_id) === String(project.id) && String(t.module_id) === String(mod.id)
+                                );
+                                const total = moduleTasks.length;
+                                const done = moduleTasks.filter(t => t.status === 'done').length;
+                                const percent = total === 0 ? 0 : Math.round((done / total) * 100);
+
+                                return (
+                                  <div key={mod.id}>
+                                    <div className="flex items-center gap-2">
+                                      <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold border bg-purple-50 text-purple-700 border-purple-200">
+                                        {mod.name}
+                                      </span>
+                                      <span className="text-xs text-gray-500">{done}/{total} done</span>
+                                      <span className="text-xs text-purple-700 font-bold">{percent}%</span>
+                                    </div>
+                                    <div className="h-2 bg-purple-100 rounded overflow-hidden mt-1 mb-1">
+                                      <div
+                                        className="h-2 bg-gradient-to-r from-purple-400 to-purple-600 rounded"
+                                        style={{ width: `${percent}%`, transition: 'width 0.4s' }}
+                                      />
+                                    </div>
+                                  </div>
+                                );
+                              })}
+                            </div>
+                          )}
+                        </div>
+                      )}
                     </li>
                   );
                 })}
@@ -390,6 +444,7 @@ export default function Summary() {
             <table className="min-w-full text-sm border rounded-xl overflow-hidden">
               <thead className="bg-blue-100 text-blue-800">
                 <tr>
+                  <th className="py-2 px-3 text-center">Action</th>
                   <th className="py-2 px-3 text-left">Name</th>
                   <th className="py-2 px-3 text-center">To Do</th>
                   <th className="py-2 px-3 text-center">In Progress</th>
@@ -421,36 +476,263 @@ export default function Summary() {
                     const showTotal = showTodo + showInprogress + showDone;
                     const percentDone = showTotal > 0 ? Math.round((showDone / showTotal) * 100) : 0;
                     const isAvailable = showInprogress === 0;
+                    // Hanya tampilkan baris jika showTotal > 0 atau tidak ada filter status/project
+                    if (
+                      (statusFilter || projectFilter)
+                        ? showTotal > 0
+                        : true
+                    ) {
+                      return (
+                        <React.Fragment key={member.id}>
+                          <tr className="hover:bg-blue-50 transition-all">
+                            {/* Action Button */}
+                            <td className="py-2 px-3 text-center align-top">
+                              <button
+                                className="bg-blue-100 hover:bg-blue-200 text-blue-700 font-bold rounded-full w-7 h-7 flex items-center justify-center text-lg transition"
+                                onClick={() =>
+                                  setShowMemberTasks(prev => ({
+                                    ...prev,
+                                    [member.id]: !prev[member.id],
+                                  }))
+                                }
+                                title={showMemberTasks[member.id] ? 'Hide Tasks' : 'Show Tasks'}
+                                type="button"
+                              >
+                                {showMemberTasks[member.id] ? '−' : '+'}
+                              </button>
+                            </td>
+                            <td className="py-2 px-3 font-semibold">{member.name}</td>
+                            <td className="py-2 px-3 text-center">{showTodo}</td>
+                            <td className="py-2 px-3 text-center">{showInprogress}</td>
+                            <td className="py-2 px-3 text-center">{showDone}</td>
+                            <td className="py-2 px-3 text-center">{showTotal}</td>
+                            <td className="py-2 px-3 text-center">
+                              <div className="flex items-center gap-2">
+                                <div className="flex-1 h-2 bg-gray-200 rounded-full overflow-hidden w-20">
+                                  <div
+                                    className={`h-2 rounded-full transition-all duration-300
+                                      ${percentDone === 100 ? 'bg-emerald-400' : 'bg-blue-400'}
+                                    `}
+                                    style={{ width: `${percentDone}%` }}
+                                  ></div>
+                                </div>
+                                <span className="text-xs text-gray-700 w-8">{percentDone}%</span>
+                              </div>
+                            </td>
+                            <td className="py-2 px-3 text-center">
+                              <span className={`inline-block text-xs px-2 py-0.5 rounded-full font-semibold border
+                                ${isAvailable
+                                  ? 'bg-emerald-100 text-emerald-700 border-emerald-200'
+                                  : 'bg-rose-100 text-rose-700 border-rose-200'}
+                              `}>
+                                {isAvailable ? 'Available' : 'Busy'}
+                              </span>
+                            </td>
+                          </tr>
+                          {/* TASK LIST ROW */}
+                          {showMemberTasks[member.id] && (
+                            <tr>
+                              <td colSpan={8} className="bg-blue-50 px-6 py-3">
+                                {memberTasks.length > 0 ? (
+                                  <ul className="list-disc ml-6 flex flex-col gap-1">
+                                    {memberTasks.map(task => (
+                                      <li key={task.id} className="flex items-center gap-2">
+                                        <span className="font-semibold">{task.title}</span>
+                                        <span className="text-xs text-gray-500">
+                                          ({projects.find(p => p.id === task.project_id)?.name || '-'})
+                                        </span>
+                                        <span className={`text-xs px-2 py-0.5 rounded-full font-semibold border
+                                          ${task.status === 'done'
+                                            ? 'bg-emerald-100 text-emerald-700 border-emerald-200'
+                                            : task.status === 'in_progress'
+                                            ? 'bg-orange-100 text-orange-700 border-orange-200'
+                                            : 'bg-gray-100 text-gray-700 border-gray-200'}
+                                        `}>
+                                          {task.status.replace('_', ' ').toUpperCase()}
+                                        </span>
+                                        <span className="text-xs text-gray-400">
+                                          Due: {task.due_date || '-'}
+                                        </span>
+                                      </li>
+                                    ))}
+                                  </ul>
+                                ) : (
+                                  <div className="text-xs text-gray-400 italic mt-1">No tasks</div>
+                                )}
+                              </td>
+                            </tr>
+                          )}
+                        </React.Fragment>
+                      );
+                    }
+                    return null;
+                  })}
+              </tbody>
+            </table>
+          </div>
+          {/* Project Task Summary */}
+          <div className="bg-white rounded-xl shadow p-6 border border-green-100 mb-8 overflow-x-auto">
+            <h2 className="text-lg font-semibold mb-4 text-green-800 flex items-center gap-2">
+              <FaProjectDiagram className="text-green-400" /> Project Task Summary
+            </h2>
+            {/* Filter */}
+            <div className="flex flex-col sm:flex-row gap-2 mb-4">
+              <input
+                type="text"
+                placeholder="Filter by project name..."
+                className="border rounded-lg px-3 py-2 w-full sm:w-60 shadow-sm focus:outline-none focus:ring-2 focus:ring-green-200 transition"
+                value={projectSummaryFilter}
+                onChange={e => setProjectSummaryFilter(e.target.value)}
+              />
+            </div>
+            <table className="min-w-full text-sm border rounded-xl overflow-hidden">
+              <thead className="bg-green-100 text-green-800">
+                <tr>
+                  <th className="py-2 px-3 text-center">Action</th>
+                  <th className="py-2 px-3 text-left">Project</th>
+                  <th className="py-2 px-3 text-center">To Do</th>
+                  <th className="py-2 px-3 text-center">In Progress</th>
+                  <th className="py-2 px-3 text-center">Done</th>
+                  <th className="py-2 px-3 text-center">Total</th>
+                  <th className="py-2 px-3 text-center">Progress</th>
+                  <th className="py-2 px-3 text-center">Status</th>
+                </tr>
+              </thead>
+              <tbody>
+                {projects
+                  .filter(project =>
+                    !projectSummaryFilter ||
+                    project.name?.toLowerCase().includes(projectSummaryFilter.toLowerCase())
+                  )
+                  .map(project => {
+                    const projectTasks = tasks.filter(t => t.project_id === project.id);
+                    const todo = projectTasks.filter(t => t.status === 'todo').length;
+                    const inprogress = projectTasks.filter(t => t.status === 'in_progress').length;
+                    const done = projectTasks.filter(t => t.status === 'done').length;
+                    const total = projectTasks.length;
+                    const percentDone = total > 0 ? Math.round((done / total) * 100) : 0;
+                    const isDone = percentDone === 100 && total > 0;
                     return (
-                      <tr key={member.id} className="hover:bg-blue-50 transition-all">
-                        <td className="py-2 px-3 font-semibold">{member.name}</td>
-                        <td className="py-2 px-3 text-center">{showTodo}</td>
-                        <td className="py-2 px-3 text-center">{showInprogress}</td>
-                        <td className="py-2 px-3 text-center">{showDone}</td>
-                        <td className="py-2 px-3 text-center">{showTotal}</td>
-                        <td className="py-2 px-3 text-center">
-                          <div className="flex items-center gap-2">
-                            <div className="flex-1 h-2 bg-gray-200 rounded-full overflow-hidden w-20">
-                              <div
-                                className={`h-2 rounded-full transition-all duration-300
-                                  ${percentDone === 100 ? 'bg-emerald-400' : 'bg-blue-400'}
-                                `}
-                                style={{ width: `${percentDone}%` }}
-                              ></div>
+                      <React.Fragment key={project.id}>
+                        <tr className="hover:bg-green-50 transition-all">
+                          {/* Action Button */}
+                          <td className="py-2 px-3 text-center align-top">
+                            <button
+                              className="bg-purple-100 hover:bg-purple-200 text-purple-700 font-bold rounded-full w-7 h-7 flex items-center justify-center text-lg transition"
+                              onClick={() =>
+                                setShowModules(prev => ({
+                                  ...prev,
+                                  [project.id]: !prev[project.id],
+                                }))
+                              }
+                              title={showModules[project.id] ? 'Hide Modules' : 'Show Modules'}
+                              type="button"
+                            >
+                              {showModules[project.id] ? '−' : '+'}
+                            </button>
+                          </td>
+                          {/* Project Info */}
+                          <td className="py-2 px-3 align-top">
+                            <div className="font-bold text-green-900 mb-1">{project.name}</div>
+                          </td>
+                          <td className="py-2 px-3 text-center">{todo}</td>
+                          <td className="py-2 px-3 text-center">{inprogress}</td>
+                          <td className="py-2 px-3 text-center">{done}</td>
+                          <td className="py-2 px-3 text-center">{total}</td>
+                          <td className="py-2 px-3 text-center">
+                            <div className="flex items-center gap-2">
+                              <div className="flex-1 h-2 bg-gray-200 rounded-full overflow-hidden w-20">
+                                <div
+                                  className={`h-2 rounded-full transition-all duration-300
+                                    ${isDone ? 'bg-emerald-400' : 'bg-orange-400'}
+                                  `}
+                                  style={{ width: `${percentDone}%` }}
+                                ></div>
+                              </div>
+                              <span className="text-xs text-gray-700 w-8">{percentDone}%</span>
                             </div>
-                            <span className="text-xs text-gray-700 w-8">{percentDone}%</span>
-                          </div>
-                        </td>
-                        <td className="py-2 px-3 text-center">
-                          <span className={`inline-block text-xs px-2 py-0.5 rounded-full font-semibold border
-                            ${isAvailable
-                              ? 'bg-emerald-100 text-emerald-700 border-emerald-200'
-                              : 'bg-rose-100 text-rose-700 border-rose-200'}
-                          `}>
-                            {isAvailable ? 'Available' : 'Busy'}
-                          </span>
-                        </td>
-                      </tr>
+                          </td>
+                          <td className="py-2 px-3 text-center">
+                            <span className={`inline-block text-xs px-2 py-0.5 rounded-full font-semibold border
+                              ${isDone
+                                ? 'bg-emerald-100 text-emerald-700 border-emerald-200'
+                                : 'bg-orange-100 text-orange-700 border-orange-200'}
+                        `}>
+                              {isDone ? 'Done' : 'On Progress'}
+                            </span>
+                          </td>
+                        </tr>
+                        {/* MODULE LIST ROW */}
+                        {showModules[project.id] && (
+                          <tr>
+                            <td colSpan={8} className="bg-purple-50 px-6 py-3">
+                              {Array.isArray(project.modules) && project.modules.length > 0 ? (
+                                <table className="min-w-full text-xs border rounded-xl overflow-hidden bg-purple-50">
+                                  <thead className="bg-purple-100 text-purple-800">
+                                    <tr>
+                                      <th className="py-1 px-2 text-left">Module</th>
+                                      <th className="py-1 px-2 text-center">To Do</th>
+                                      <th className="py-1 px-2 text-center">In Progress</th>
+                                      <th className="py-1 px-2 text-center">Done</th>
+                                      <th className="py-1 px-2 text-center">Total</th>
+                                      <th className="py-1 px-2 text-center">Progress</th>
+                                      <th className="py-1 px-2 text-center">Status</th>
+                                    </tr>
+                                  </thead>
+                                  <tbody>
+                                    {project.modules.map(mod => {
+                                      const moduleTasks = tasks.filter(
+                                        t => String(t.project_id) === String(project.id) && String(t.module_id) === String(mod.id)
+                                      );
+                                      const todo = moduleTasks.filter(t => t.status === 'todo').length;
+                                      const inprogress = moduleTasks.filter(t => t.status === 'in_progress').length;
+                                      const done = moduleTasks.filter(t => t.status === 'done').length;
+                                      const total = moduleTasks.length;
+                                      const percent = total === 0 ? 0 : Math.round((done / total) * 100);
+                                      const isDone = percent === 100 && total > 0;
+                                      return (
+                                        <tr key={mod.id} className="hover:bg-purple-100 transition-all">
+                                          <td className="py-1 px-2 font-semibold">
+                                            <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold border bg-purple-100 text-purple-700 border-purple-200">
+                                              <FaProjectDiagram className="mr-1" /> {mod.name}
+                                            </span>
+                                          </td>
+                                          <td className="py-1 px-2 text-center">{todo}</td>
+                                          <td className="py-1 px-2 text-center">{inprogress}</td>
+                                          <td className="py-1 px-2 text-center">{done}</td>
+                                          <td className="py-1 px-2 text-center">{total}</td>
+                                          <td className="py-1 px-2 text-center">
+                                            <div className="flex items-center gap-1">
+                                              <div className="flex-1 h-1 bg-purple-200 rounded-full overflow-hidden w-14">
+                                                <div
+                                                  className="h-1 bg-gradient-to-r from-purple-400 to-purple-600 rounded"
+                                                  style={{ width: `${percent}%`, transition: 'width 0.4s' }}
+                                                />
+                                              </div>
+                                              <span className="text-xs text-purple-700 w-8">{percent}%</span>
+                                            </div>
+                                          </td>
+                                          <td className="py-1 px-2 text-center">
+                                            <span className={`inline-block text-xs px-2 py-0.5 rounded-full font-semibold border
+                                              ${isDone
+                                                ? 'bg-emerald-100 text-emerald-700 border-emerald-200'
+                                                : 'bg-orange-100 text-orange-700 border-orange-200'}
+                                            `}>
+                                              {isDone ? 'Done' : 'On Progress'}
+                                            </span>
+                                          </td>
+                                        </tr>
+                                      );
+                                    })}
+                                  </tbody>
+                                </table>
+                              ) : (
+                                <div className="text-xs text-gray-400 italic mt-1">No modules</div>
+                              )}
+                            </td>
+                          </tr>
+                        )}
+                      </React.Fragment>
                     );
                   })}
               </tbody>

@@ -13,12 +13,13 @@ class TaskController extends Controller
     
     public function index()
     {
-        // Tampilkan semua task, dengan relasi assignment (user yang di-assign), creator (pembuat), parent, dan project
+        // Tampilkan semua task, dengan relasi assignment, creator, parent, project, dan module
         return Task::with([
             'assignment:id,name,email',
             'creator:id,name,email',
             'parent:id,title',
-            'project:id,name'
+            'project:id,name',
+            'module:id,name,project_id' // Hapus desc
         ])->get();
     }
 
@@ -36,16 +37,18 @@ class TaskController extends Controller
             'assignment_id' => 'nullable|exists:users,id',
             'parent_id' => 'nullable|exists:tasks,id',
             'project_id' => 'nullable|exists:projects,id',
-            'estimated_hours' => 'nullable|numeric|min:0', // tambahkan validasi estimated_hours
+            'module_id' => 'nullable|exists:project_modules,id', // validasi module_id
+            'estimated_hours' => 'nullable|numeric|min:0',
         ]);
 
-        $validated['created_by'] = Auth::id(); // ganti user_id menjadi created_by
+        $validated['created_by'] = Auth::id();
 
         return Task::create($validated)->load([
             'assignment:id,name,email',
             'creator:id,name,email',
             'parent:id,title',
-            'project:id,name'
+            'project:id,name',
+            'module:id,name,project_id' // Hapus desc
         ]);
     }
 
@@ -65,7 +68,8 @@ class TaskController extends Controller
             'assignment_id' => 'nullable|exists:users,id',
             'parent_id' => 'nullable|exists:tasks,id',
             'project_id' => 'nullable|exists:projects,id',
-            'estimated_hours' => 'nullable|numeric|min:1', // tambahkan validasi estimated_hours
+            'module_id' => 'nullable|exists:project_modules,id', // validasi module_id
+            'estimated_hours' => 'nullable|numeric|min:1',
         ]);
 
         $task->update($validated);
@@ -74,7 +78,8 @@ class TaskController extends Controller
             'assignment:id,name,email',
             'creator:id,name,email',
             'parent:id,title',
-            'project:id,name'
+            'project:id,name',
+            'module:id,name,project_id' // Hapus desc
         ]);
     }
 

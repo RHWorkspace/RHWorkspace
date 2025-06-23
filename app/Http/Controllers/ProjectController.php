@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Models\Project;
 use App\Models\User;
+use App\Models\ProjectModule;
 use Illuminate\Http\Request;
 
 class ProjectController extends Controller
@@ -13,10 +14,11 @@ class ProjectController extends Controller
      */
     public function index()
     {
-        // Tambahkan relasi members agar data member tersedia di frontend
+        // Tambahkan relasi ownerUser dan members agar data lengkap
         return Project::with([
             'ownerUser:id,name,email',
-            'members:id,name,email'
+            'members:id,name,email',
+            'modules'
         ])->get();
     }
 
@@ -39,7 +41,7 @@ class ProjectController extends Controller
             'owner' => 'nullable|exists:users,id',
         ]);
         $project = Project::create($validated);
-        return $project->load(['ownerUser:id,name,email', 'members:id,name,email']);
+        return $project->load(['ownerUser:id,name,email', 'members:id,name,email', 'modules']);
     }
 
     /**
@@ -47,7 +49,7 @@ class ProjectController extends Controller
      */
     public function show(Project $project)
     {
-        return $project->load(['ownerUser:id,name,email', 'members:id,name,email']);
+        return $project->load(['ownerUser:id,name,email', 'members:id,name,email', 'modules']);
     }
 
     /**
@@ -69,7 +71,7 @@ class ProjectController extends Controller
             'owner' => 'nullable|exists:users,id',
         ]);
         $project->update($validated);
-        return $project->load(['ownerUser:id,name,email', 'members:id,name,email']);
+        return $project->load(['ownerUser:id,name,email', 'members:id,name,email', 'modules']);
     }
 
     /**
@@ -90,13 +92,12 @@ class ProjectController extends Controller
             'user_id' => 'required|exists:users,id',
             'role' => 'nullable|string|max:50',
         ]);
-        // Hindari duplicate attach
         if (!$project->members()->where('user_id', $validated['user_id'])->exists()) {
             $project->members()->attach($validated['user_id'], [
                 'role' => $validated['role'] ?? 'member'
             ]);
         }
-        return $project->load(['ownerUser:id,name,email', 'members:id,name,email']);
+        return $project->load(['ownerUser:id,name,email', 'members:id,name,email', 'modules']);
     }
 
     /**
@@ -105,7 +106,7 @@ class ProjectController extends Controller
     public function removeMember(Project $project, User $user)
     {
         $project->members()->detach($user->id);
-        return $project->load(['ownerUser:id,name,email', 'members:id,name,email']);
+        return $project->load(['ownerUser:id,name,email', 'members:id,name,email', 'modules']);
     }
 
     /**
@@ -117,11 +118,51 @@ class ProjectController extends Controller
             'role' => 'required|string|in:admin,member,viewer,developer,reporter,qa',
         ]);
 
-        // Update role di pivot table
         $project->members()->updateExistingPivot($user->id, [
             'role' => $validated['role'],
         ]);
 
-        return $project->load(['ownerUser:id,name,email', 'members:id,name,email']);
+        return $project->load(['ownerUser:id,name,email', 'members:id,name,email', 'modules']);
+    }
+
+    /**
+     * Add a module to the project.
+     */
+    public function addModule(Request $request, Project $project)
+    {
+        $validated = $request->validate([
+            'name' => 'required|string|max:255',
+            'desc' => 'nullable|string',
+        ]);
+
+        $module = $project->modules()->create($validated);
+
+        // Kembalikan project dengan relasi lengkap agar frontend langsung update
+        return response()->json([
+            'message' => 'Module added successfully.',
+            'module' => $module,
+            'project' => $project->load(['ownerUser:id,name,email', 'members:id,name,email', 'modules'])
+        ]);
+    }
+
+    /**
+     * Update a module in the project.
+     */
+    public function updateModule(Request $request, Project $project, ProjectModule $module)
+    {
+        $validated = $request->validate([
+            'name' => 'required|string|max:255',
+        ]);
+        $module->update($validated);
+        return response()->json(['message' => 'Module updated']);
+    }
+
+    /**
+     * Delete a module from the project.
+     */
+    public function deleteModule(Project $project, ProjectModule $module)
+    {
+        $module->delete();
+        return response()->json(['message' => 'Module deleted']);
     }
 }

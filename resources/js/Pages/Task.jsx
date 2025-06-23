@@ -34,11 +34,12 @@ export default function Task() {
     link_issue: '',
     priority: 'medium',
     completed_at: '',
-    status: 'todo', // default status todo
+    status: 'todo',
     project_id: '',
-    assignment_id: '', // <--- assignment
+    assignment_id: '',
     parent_id: '',
     estimated_hours: '',
+    module_id: '', // <-- tambahkan ini
   });
   const [editingId, setEditingId] = useState(null);
   const [error, setError] = useState('');
@@ -105,8 +106,10 @@ export default function Task() {
   // Always store id as string for select fields
   const handleChange = (e) => {
     const { name, value } = e.target;
-    if (['assignment_id', 'project_id', 'parent_id'].includes(name)) {
+    if (['assignment_id', 'project_id', 'parent_id', 'module_id'].includes(name)) {
       setForm({ ...form, [name]: value === '' ? '' : String(value) });
+      // Reset module_id jika project_id berubah
+      if (name === 'project_id') setForm(f => ({ ...f, project_id: value, module_id: '' }));
     } else if (name === 'status') {
       if (value === 'done') {
         setForm((prev) => ({
@@ -287,6 +290,7 @@ export default function Task() {
       assignment_id: task.assignment_id ? String(task.assignment_id) : '',
       parent_id: task.parent_id ? String(task.parent_id) : '',
       estimated_hours: task.estimated_hours || '',
+      module_id: task.module_id ? String(task.module_id) : '', // <-- tambahkan ini
     });
     setShowModal(true);
     setError('');
@@ -559,6 +563,7 @@ export default function Task() {
                 <th className="py-3 px-4 text-left font-semibold w-32">Completed</th>
                 <th className="py-3 px-4 text-left font-semibold w-24">Est. Hours</th>
                 <th className="py-3 px-4 text-left font-semibold w-20">Link</th>
+                <th className="py-3 px-4 text-left font-semibold min-w-[120px]">Module</th>
                 <th className="py-3 px-4 text-left font-semibold w-32">Actions</th>
               </tr>
             </thead>
@@ -576,6 +581,8 @@ export default function Task() {
               {paginatedTasks.map((task, idx) => {
                 const subtasks = filteredTasks.filter((t) => t.parent_id === task.id);
                 const isCollapsed = collapsed[task.id] === false ? false : true;
+                const project = getProject(task.project_id);
+                const module = project?.modules?.find(m => String(m.id) === String(task.module_id));
                 return (
                   <React.Fragment key={task.id}>
                     <tr className={`border-t transition hover:bg-blue-50 bg-white`}>
@@ -660,6 +667,13 @@ export default function Task() {
                           >
                             Link
                           </a>
+                        ) : (
+                          <span className="text-gray-400">-</span>
+                        )}
+                      </td>
+                      <td className="py-2 px-4 text-gray-700 align-top">
+                        {module ? (
+                          <span title={module.desc}>{module.name}</span>
                         ) : (
                           <span className="text-gray-400">-</span>
                         )}
@@ -799,6 +813,20 @@ export default function Task() {
                               step={0.25}
                               placeholder="Jam"
                             />
+                            <select
+                              name="module_id"
+                              className="border border-blue-200 rounded px-2 py-1"
+                              value={subtaskForm[task.id]?.module_id || ''}
+                              onChange={(e) => handleSubtaskChange(task.id, e)}
+                              disabled={!task.project_id}
+                            >
+                              <option value="">Module</option>
+                              {getProject(task.project_id)?.modules?.map((mod) => (
+                                <option key={mod.id} value={mod.id}>
+                                  {mod.name}
+                                </option>
+                              ))}
+                            </select>
                             <button
                               type="submit"
                               className="bg-blue-600 text-white px-3 py-1 rounded hover:bg-blue-700 transition font-semibold"
@@ -889,6 +917,11 @@ export default function Task() {
                               Link
                             </a>
                           ) : (
+                            <span className="text-gray-400">-</span>
+                          )}
+                        </td>
+                        <td className="py-2 px-4 text-gray-700 align-top">
+                          {getProject(sub.project_id)?.modules?.find(m => String(m.id) === String(sub.module_id))?.name || (
                             <span className="text-gray-400">-</span>
                           )}
                         </td>
@@ -1136,6 +1169,23 @@ export default function Task() {
                       min={0}
                       step={0.25}
                     />
+                  </div>
+                  <div>
+                    <label className="block font-semibold mb-1 text-gray-700">Module</label>
+                    <select
+                      name="module_id"
+                      className="w-full border border-blue-200 rounded-xl px-4 py-2 focus:ring-2 focus:ring-blue-400 focus:outline-none transition shadow-sm bg-blue-50"
+                      value={form.module_id || ''}
+                      onChange={handleChange}
+                      disabled={!form.project_id}
+                    >
+                      <option value="">-- Select Module --</option>
+                      {getProject(form.project_id)?.modules?.map((mod) => (
+                        <option key={mod.id} value={mod.id}>
+                          {mod.name}
+                        </option>
+                      ))}
+                    </select>
                   </div>
                 </div>
                 <div className="flex gap-2 mt-8 justify-end">

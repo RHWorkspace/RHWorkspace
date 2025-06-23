@@ -32,6 +32,12 @@ class Project extends Model
             ->withTimestamps();
     }
 
+    // Relasi ke modules (ProjectModule)
+    public function modules()
+    {
+        return $this->hasMany(\App\Models\ProjectModule::class, 'project_id');
+    }
+
     // Cek apakah user adalah member project
     public function isMember($userId)
     {
