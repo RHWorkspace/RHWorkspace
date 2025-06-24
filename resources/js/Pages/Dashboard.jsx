@@ -134,6 +134,18 @@ function getUserWorkSummary(tasks) {
     };
 }
 
+// Filter tasks by month and week
+function filterTasksByMonthWeek(tasks, filterMonth, filterWeek) {
+    if (!filterMonth && !filterWeek) return tasks;
+    return tasks.filter(t => {
+        if (!t.due_date) return false;
+        const due = new Date(t.due_date);
+        const monthMatch = filterMonth ? (due.getMonth() + 1) === Number(filterMonth) : true;
+        const weekMatch = filterWeek ? getWeekOfMonth(due) === Number(filterWeek) : true;
+        return monthMatch && weekMatch;
+    });
+}
+
 export default function Dashboard() {
     const { auth } = usePage().props;
     const [users, setUsers] = useState([]);

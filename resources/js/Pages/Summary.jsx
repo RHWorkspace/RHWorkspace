@@ -499,27 +499,57 @@ export default function Summary() {
                         <tr>
                           <td colSpan={7} className="bg-blue-50 px-6 py-3">
                             {memberTasks.length > 0 ? (
-                              <ul className="list-disc ml-6 flex flex-col gap-1">
-                                {memberTasks.map(task => (
-                                  <li key={task.id} className="flex items-center gap-2">
-                                    <span className="font-semibold">{task.title}</span>
-                                    <span className="text-xs text-gray-500">
-                                      ({projects.find(p => p.id === task.project_id)?.name || '-'})
-                                    </span>
-                                    <span className={`text-xs px-2 py-0.5 rounded-full font-semibold border
-                                      ${task.status === 'done'
-                                        ? 'bg-emerald-100 text-emerald-700 border-emerald-200'
-                                        : task.status === 'in_progress'
-                                        ? 'bg-orange-100 text-orange-700 border-orange-200'
-                                        : 'bg-gray-100 text-gray-700 border-gray-200'}
-                                    `}>
-                                      {task.status.replace('_', ' ').toUpperCase()}
-                                    </span>
-                                    <span className="text-xs text-gray-400">
-                                      Due: {task.due_date || '-'}
-                                    </span>
-                                  </li>
-                                ))}
+                              <ul className="flex flex-col gap-1">
+                                {memberTasks
+                                  .filter(task => !task.parent_id) // hanya task utama
+                                  .map(task => (
+                                    <li key={task.id}>
+                                      <div className="flex items-center gap-2">
+                                        <span className="font-semibold">{task.title}</span>
+                                        <span className="text-xs text-gray-500">
+                                          ({projects.find(p => p.id === task.project_id)?.name || '-'})
+                                        </span>
+                                        <span className={`text-xs px-2 py-0.5 rounded-full font-semibold border
+                                          ${task.status === 'done'
+                                            ? 'bg-emerald-100 text-emerald-700 border-emerald-200'
+                                            : task.status === 'in_progress'
+                                            ? 'bg-orange-100 text-orange-700 border-orange-200'
+                                            : 'bg-gray-100 text-gray-700 border-gray-200'}
+                                        `}>
+                                          {task.status.replace('_', ' ').toUpperCase()}
+                                        </span>
+                                        <span className="text-xs text-gray-400">
+                                          Due: {task.due_date || '-'}
+                                        </span>
+                                      </div>
+                                      {/* Subtask */}
+                                      <ul className="ml-6 border-l-2 border-blue-200 pl-3 mt-1">
+                                        {memberTasks
+                                          .filter(sub => sub.parent_id === task.id)
+                                          .map(sub => (
+                                            <li key={sub.id} className="flex items-center gap-2 text-sm text-blue-900">
+                                              <span className="mr-1">↳</span>
+                                              <span>{sub.title}</span>
+                                              <span className="text-xs text-gray-500">
+                                                ({projects.find(p => p.id === sub.project_id)?.name || '-'})
+                                              </span>
+                                              <span className={`text-xs px-2 py-0.5 rounded-full font-semibold border
+                                                ${sub.status === 'done'
+                                                  ? 'bg-emerald-100 text-emerald-700 border-emerald-200'
+                                                  : sub.status === 'in_progress'
+                                                  ? 'bg-orange-100 text-orange-700 border-orange-200'
+                                                  : 'bg-gray-100 text-gray-700 border-gray-200'}
+                                              `}>
+                                                {sub.status.replace('_', ' ').toUpperCase()}
+                                              </span>
+                                              <span className="text-xs text-gray-400">
+                                                Due: {sub.due_date || '-'}
+                                              </span>
+                                            </li>
+                                          ))}
+                                      </ul>
+                                    </li>
+                                  ))}
                               </ul>
                             ) : (
                               <div className="text-xs text-gray-400 italic mt-1">No tasks</div>

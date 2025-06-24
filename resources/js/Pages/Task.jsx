@@ -3,7 +3,7 @@ import axios from 'axios';
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout';
 import { Head, usePage } from '@inertiajs/react';
 import { Transition } from '@headlessui/react';
-import * as XLSX from 'xlsx'; // Tambahkan import ini
+import * as XLSX from 'xlsx';
 
 
 const priorities = [
@@ -39,7 +39,7 @@ export default function Task() {
     assignment_id: '',
     parent_id: '',
     estimated_hours: '',
-    module_id: '', // <-- tambahkan ini
+    module_id: '',
   });
   const [editingId, setEditingId] = useState(null);
   const [error, setError] = useState('');
@@ -62,13 +62,13 @@ export default function Task() {
   const [filterProject, setFilterProject] = useState('');
   const [filterAssignment, setFilterAssignment] = useState('');
   const [filterStatus, setFilterStatus] = useState('');
-  const [filterModule, setFilterModule] = useState(''); // <-- Tambahkan ini
+  const [filterModule, setFilterModule] = useState('');
 
-  // Tambahkan state untuk pagination
+  // Pagination
   const [currentPage, setCurrentPage] = useState(1);
   const [perPage] = useState(10);
 
-  // Tambahkan state untuk filter bulan dan minggu
+  // Filter bulan dan minggu
   const [filterMonth, setFilterMonth] = useState('');
   const [filterWeek, setFilterWeek] = useState('');
 
@@ -115,6 +115,22 @@ export default function Task() {
     }
   };
 
+  // Helper: total jam subtask & sisa jam parent
+  const getSubtasksTotalHours = (parentId) => {
+    return tasks
+      .filter(t => String(t.parent_id) === String(parentId))
+      .reduce((sum, t) => sum + (parseFloat(t.estimated_hours) || 0), 0);
+  };
+  // Sisa jam parent = estimated_hours parent (karena sudah dikurangi subtask di backend)
+  const getParentRemainingHours = (parentTask) => {
+    return parseFloat(parentTask.estimated_hours) || 0;
+  };
+
+  // Saat edit subtask, sisa jam parent = estimated_hours parent + estimated_hours subtask yang sedang diedit
+  const getParentRemainingHoursForEditSubtask = (parentTask, editingSubtask) => {
+    return (parseFloat(parentTask.estimated_hours) || 0) + (parseFloat(editingSubtask.estimated_hours) || 0);
+  };
+
   // Always store id as string for select fields
   const handleChange = (e) => {
     const { name, value } = e.target;
@@ -157,6 +173,7 @@ export default function Task() {
       assignment_id: '',
       parent_id: '',
       estimated_hours: '',
+      module_id: '',
     });
     setError('');
   };
@@ -192,10 +209,42 @@ export default function Task() {
         }
       });
 
-      if (editingId) {
+      // Jika edit subtask (ada parent_id)
+      if (editingId && form.parent_id) {
+        // Cari data subtask sebelum diedit
+        const oldSubtask = tasks.find(t => t.id === editingId);
+        const parentTask = tasks.find(t => t.id === Number(form.parent_id));
+        const oldHours = parseFloat(oldSubtask?.estimated_hours) || 0;
+        const newHours = parseFloat(form.estimated_hours) || 0;
+        const diff = newHours - oldHours;
+
+        // Validasi: tidak boleh melebihi sisa jam parent
+        const sisaJam = getParentRemainingHoursForEditSubtask(parentTask, oldSubtask);
+        if (newHours > sisaJam) {
+          setError(`Estimated Hours subtask tidak boleh lebih dari sisa parent (${sisaJam} jam).`);
+          setNotification(`Failed to update subtask: Estimated Hours subtask tidak boleh lebih dari sisa parent (${sisaJam} jam).`);
+          setTimeout(() => setNotification(''), 3500);
+          return;
+        }
+
+        // Update subtask
+        await axios.put(`/tasks/${editingId}`, payload);
+
+        // Update parent jika ada perubahan jam
+        if (diff !== 0) {
+          await axios.put(`/tasks/${parentTask.id}`, {
+            ...parentTask,
+            estimated_hours: Math.max((parseFloat(parentTask.estimated_hours) || 0) - diff, 0),
+          });
+        }
+
+        setNotification('Subtask updated successfully!');
+      } else if (editingId) {
+        // Edit task biasa
         await axios.put(`/tasks/${editingId}`, payload);
         setNotification('Task updated successfully!');
       } else {
+        // Add task
         await axios.post('/tasks', payload);
         setNotification('Task added successfully!');
       }
@@ -212,6 +261,7 @@ export default function Task() {
         assignment_id: '',
         parent_id: '',
         estimated_hours: '',
+        module_id: '',
       });
       setEditingId(null);
       setShowModal(false);
@@ -251,13 +301,23 @@ export default function Task() {
         setTimeout(() => setNotification(''), 3500);
         return;
       }
+      // Validasi jam subtask
+      const sisaJam = getParentRemainingHours(parentTask);
+      const inputJam = parseFloat(subForm.estimated_hours) || 0;
+      if (inputJam > sisaJam) {
+        setError(`Estimated Hours subtask tidak boleh lebih dari sisa parent (${sisaJam} jam).`);
+        setNotification(`Failed to add subtask: Estimated Hours subtask tidak boleh lebih dari sisa parent (${sisaJam} jam).`);
+        setTimeout(() => setNotification(''), 3500);
+        return;
+      }
     }
 
     try {
+      // 1. Tambah subtask
       const payload = {
         ...subForm,
         parent_id: String(taskId),
-        project_id: parentTask?.project_id || '', // project otomatis sama dengan parent
+        project_id: parentTask?.project_id || '',
       };
       Object.keys(payload).forEach(
         (key) => payload[key] === '' && delete payload[key]
@@ -268,6 +328,14 @@ export default function Task() {
         }
       });
       await axios.post('/tasks', payload);
+
+      // 2. Update estimated_hours parent di database
+      const newParentHours = getParentRemainingHours(parentTask) - (parseFloat(subForm.estimated_hours) || 0);
+      await axios.put(`/tasks/${parentTask.id}`, {
+        ...parentTask,
+        estimated_hours: newParentHours < 0 ? 0 : newParentHours,
+      });
+
       setNotification('Subtask added successfully!');
       setSubtaskForm((prev) => ({ ...prev, [taskId]: undefined }));
       setShowSubtaskForm((prev) => ({ ...prev, [taskId]: false }));
@@ -302,7 +370,7 @@ export default function Task() {
       assignment_id: task.assignment_id ? String(task.assignment_id) : '',
       parent_id: task.parent_id ? String(task.parent_id) : '',
       estimated_hours: task.estimated_hours || '',
-      module_id: task.module_id ? String(task.module_id) : '', // <-- tambahkan ini
+      module_id: task.module_id ? String(task.module_id) : '',
     });
     setShowModal(true);
     setError('');
@@ -329,6 +397,7 @@ export default function Task() {
       assignment_id: '',
       parent_id: '',
       estimated_hours: '',
+      module_id: '',
     });
     setShowModal(true);
     setError('');
@@ -377,11 +446,9 @@ export default function Task() {
     if (filterAssignment && String(t.assignment_id) !== String(filterAssignment)) return false;
     if (filterStatus && t.status !== filterStatus) return false;
     if (filterModule && String(t.module_id) !== String(filterModule)) return false;
-    // Filter by month (berdasarkan start_date)
     if (filterMonth) {
       if (!t.start_date || t.start_date.slice(0, 7) !== filterMonth) return false;
     }
-    // Filter by week (berdasarkan start_date)
     if (filterWeek && filterMonth) {
       const week = getWeekOfMonth(t.start_date);
       if (String(week) !== String(filterWeek)) return false;
@@ -786,24 +853,26 @@ export default function Task() {
                         )}
                       </td>
                       <td className="py-2 px-4 flex gap-2 align-top">
+                        {/* Edit button */}
                         <button
                           onClick={() => handleEdit(task)}
                           className="p-2 rounded hover:bg-yellow-100 transition"
                           title="Edit"
                           type="button"
                         >
-                          {/* Ganti icon edit ke icon pensil yang lebih jelas */}
+                          {/* Icon pensil */}
                           <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-yellow-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16.862 3.487a2.25 2.25 0 113.182 3.182L7.5 19.213l-4 1 1-4 12.362-12.726z" />
                           </svg>
                         </button>
+                        {/* Delete button */}
                         <button
                           onClick={() => handleDelete(task.id)}
                           className="p-2 rounded hover:bg-red-100 transition"
                           title="Delete"
                           type="button"
                         >
-                          {/* Ganti icon delete ke icon trash */}
+                          {/* Icon trash */}
                           <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-red-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 7h12M9 7V4a1 1 0 011-1h4a1 1 0 011 1v3m2 0v12a2 2 0 01-2 2H8a2 2 0 01-2-2V7h12z" />
                           </svg>
@@ -919,9 +988,13 @@ export default function Task() {
                               value={subtaskForm[task.id]?.estimated_hours || ''}
                               onChange={(e) => handleSubtaskChange(task.id, e)}
                               min={0}
-                              step={0.25}
+                              max={getParentRemainingHours(task)}
                               placeholder="Jam"
+                              required
                             />
+                            <span className="text-xs text-blue-600 ml-2">
+                              Sisa jam parent: {getParentRemainingHours(task)} jam
+                            </span>
                             <select
                               name="module_id"
                               className="border border-blue-200 rounded px-2 py-1"
@@ -1035,24 +1108,29 @@ export default function Task() {
                           )}
                         </td>
                         <td className="py-2 px-4 flex gap-2 align-top">
+                          {/* Edit button */}
                           <button
                             onClick={() => handleEdit(sub)}
                             className="p-2 rounded hover:bg-yellow-100 transition"
                             title="Edit"
+                            type="button"
                           >
+                            {/* Icon pensil */}
                             <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-yellow-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16.862 3.487a2.25 2.25 0 113.182 3.182L7.5 19.213l-4 1 1-4 12.362-12.726z" />
                             </svg>
                           </button>
+                          {/* Delete button */}
                           <button
                             onClick={() => handleDelete(sub.id)}
                             className="p-2 rounded hover:bg-red-100 transition"
                             title="Delete"
                             type="button"
                           >
+                            {/* Icon trash */}
                             <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-red-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 7h12M9 7V4a1 1 0 011-1h4a1 1 0 011 1v3m2 0v12a2 2 0 01-2 2H8a2 2 0 01-2-2V7h12z" />
-                            </svg>
+                          </svg>
                           </button>
                         </td>
                       </tr>
@@ -1280,7 +1358,31 @@ export default function Task() {
                     step={0.25}
                     placeholder="Jam"
                     required
+                    max={
+                      form.parent_id
+                        ? (() => {
+                            const parentTask = tasks.find(t => t.id === Number(form.parent_id));
+                            const editingSubtask = tasks.find(t => t.id === editingId);
+                            return parentTask && editingSubtask
+                              ? getParentRemainingHoursForEditSubtask(parentTask, editingSubtask)
+                              : '';
+                          })()
+                        : undefined
+                    }
                   />
+                  {form.parent_id && (
+                    <span className="text-xs text-blue-600 ml-2">
+                      Sisa jam parent: {
+                        (() => {
+                          const parentTask = tasks.find(t => t.id === Number(form.parent_id));
+                          const editingSubtask = tasks.find(t => t.id === editingId);
+                          return parentTask && editingSubtask
+                            ? getParentRemainingHoursForEditSubtask(parentTask, editingSubtask)
+                            : '';
+                        })()
+                      } jam
+                    </span>
+                  )}
                 </div>
                 <div>
                   <label className="block text-sm font-semibold text-gray-700 mb-1">Link Issue</label>
