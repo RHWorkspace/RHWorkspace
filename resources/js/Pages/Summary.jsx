@@ -218,8 +218,8 @@ export default function Summary() {
         t =>
           t.assignment_id === userId &&
           t.estimated_hours &&
-          t.due_date &&
-          new Date(t.due_date).getFullYear() === year
+          t.start_date &&
+          new Date(t.start_date).getFullYear() === year
       )
       .reduce((sum, t) => sum + Number(t.estimated_hours), 0);
   }
@@ -230,8 +230,8 @@ export default function Summary() {
           t.assignment_id === userId &&
           t.estimated_hours &&
           t.due_date &&
-          new Date(t.due_date).getFullYear() === year &&
-          new Date(t.due_date).getMonth() + 1 === month
+          new Date(t.start_date).getFullYear() === year &&
+          new Date(t.start_date).getMonth() + 1 === month
       )
       .reduce((sum, t) => sum + Number(t.estimated_hours), 0);
   }
