@@ -13,6 +13,7 @@ export default function ProjectGanttView() {
   const [projects, setProjects] = useState([]);
   const [filterProject, setFilterProject] = useState('');
   const [filterStatus, setFilterStatus] = useState('');
+  const [filterModule, setFilterModule] = useState(''); // 1. State baru
   const [viewMode, setViewMode] = useState('monthly');
   const [year, setYear] = useState(currentYear);
 
@@ -66,7 +67,19 @@ export default function ProjectGanttView() {
   );
   const filteredTasks = tasks.filter(t =>
     (!filterProject || String(t.project_id) === String(filterProject)) &&
-    (!filterStatus || t.status === filterStatus)
+    (!filterStatus || t.status === filterStatus) &&
+    (!filterModule ||
+      (t.module?.name === filterModule ||
+       t.module_name === filterModule))
+  );
+
+  // Ambil daftar modul unik dari tasks yang sesuai project filter saja (tanpa filter module/status)
+  const moduleOptions = Array.from(
+    new Set(
+      tasks
+        .filter(t => !filterProject || String(t.project_id) === String(filterProject))
+        .map(t => t.module?.name || t.module_name || "Tanpa Modul")
+    )
   );
 
   // Group tasks by project (HANYA tampilkan project yang lolos filter dan ADA task yang lolos filter)
@@ -88,6 +101,13 @@ export default function ProjectGanttView() {
 
   // Tambahkan fungsi untuk progress project
   const getProjectProgress = (tasks) => {
+    if (!tasks.length) return 0;
+    const done = tasks.filter(t => t.status === "done").length;
+    return Math.round((done / tasks.length) * 100);
+  };
+
+  // Fungsi progress modul
+  const getModuleProgress = (tasks) => {
     if (!tasks.length) return 0;
     const done = tasks.filter(t => t.status === "done").length;
     return Math.round((done / tasks.length) * 100);
@@ -248,6 +268,19 @@ export default function ProjectGanttView() {
               <option value="todo">To Do</option>
               <option value="in_progress">In Progress</option>
               <option value="done">Done</option>
+            </select>
+          </div>
+          <div>
+            <label className="block text-sm font-semibold text-gray-700 mb-1">Module</label>
+            <select
+              className="border rounded px-3 py-2 min-w-[160px] max-w-xs"
+              value={filterModule}
+              onChange={e => setFilterModule(e.target.value)}
+            >
+              <option value="">All Modules</option>
+              {moduleOptions.map((m) => (
+                <option key={m} value={m}>{m}</option>
+              ))}
             </select>
           </div>
           <div>
@@ -442,120 +475,163 @@ export default function ProjectGanttView() {
                       ));
                     })()}
                   </tr>
-                  {/* Task Rows */}
-                  {project.tasks.map((task) => {
-                    const hasDate = task.start_date && task.due_date;
-                    const startIdx = hasDate ? getBarIdx(task.start_date) : -1;
-                    const endIdx = hasDate ? getBarIdx(task.due_date) : -1;
-                    const barLength = getBarLength(startIdx, endIdx);
-                    let count =
-                      viewMode === "weekly"
-                        ? weeklyDays.length
-                        : months.length;
-                    if (viewMode === "quarterly") count = months.length;
-                    return (
-                      <tr key={task.id} className="group hover:bg-blue-50 transition">
-                        {/* Sticky task name */}
+                  {/* Task Rows per Modul */}
+                  {Object.entries(
+                    project.tasks.reduce((acc, task) => {
+                      const moduleName = task.module?.name || task.module_name || "Tanpa Modul";
+                      if (!acc[moduleName]) acc[moduleName] = [];
+                      acc[moduleName].push(task);
+                      return acc;
+                    }, {})
+                  ).map(([moduleName, moduleTasks]) => (
+                    <React.Fragment key={moduleName}>
+                      {/* Modul Row */}
+                      <tr>
                         <td
-                          className="sticky left-0 z-10 bg-white px-4 py-2 border-b w-72"
+                          className="sticky left-0 z-10 bg-gray-100 px-6 py-2 border-b text-blue-700 font-semibold"
                           style={{
-                            background: "white",
+                            background: "#f3f4f6",
                             minWidth: 288,
                             maxWidth: 288,
                             width: 288,
                             left: 0,
                             zIndex: 10
                           }}
+                          colSpan={1}
                         >
-                          <div className="flex flex-col">
-                            <span className="font-medium">{task.title}</span>
-                            <span className="text-xs text-gray-400">
-                              {task.status === "done"
-                                ? "✔️"
-                                : task.status === "in_progress"
-                                ? "⏳"
-                                : "•"}{" "}
-                              {task.status.replace("_", " ")}
-                            </span>
+                          <div className="flex items-center justify-between">
+                            <span>{moduleName}</span>
+                            {/* Progress Bar Modul */}
+                            <div className="flex items-center gap-2">
+                              <div className="w-20 h-2 bg-gray-200 rounded">
+                                <div
+                                  className="h-2 rounded bg-gradient-to-r from-blue-400 to-green-400"
+                                  style={{ width: `${getModuleProgress(moduleTasks)}%` }}
+                                ></div>
+                              </div>
+                              <span className="text-xs text-gray-500">{getModuleProgress(moduleTasks)}%</span>
+                            </div>
                           </div>
                         </td>
-                        {/* Timeline cells */}
-                        {Array.from({ length: count }).map((_, i) => {
-                          // Render bar only on the first cell of the bar
-                          if (hasDate && i === startIdx && barLength > 0) {
-                            return (
-                              <td
-                                key={i}
-                                colSpan={Math.min(barLength, count - startIdx)}
-                                className="relative px-0 py-2 border-b"
-                                style={{ padding: 0, background: "transparent" }}
-                              >
-                                <div
-                                  className={`h-6 rounded flex items-center shadow group-hover:scale-105 transition-transform duration-150 ${getColor(task.status)}`}
-                                  style={{
-                                    width: `${
-                                      Math.min(barLength, count - startIdx) *
-                                        (viewMode === "weekly" ? 80 : 120) - 4
-                                    }px`,
-                                    minWidth: "28px",
-                                    marginLeft: "2px",
-                                    marginRight: "2px",
-                                    position: "relative",
-                                    background: task.status === "done"
-                                      ? "linear-gradient(90deg, #34d399 0%, #10b981 100%)"
-                                      : task.status === "in_progress"
-                                      ? "linear-gradient(90deg, #60a5fa 0%, #2563eb 100%)"
-                                      : "linear-gradient(90deg, #d1d5db 0%, #6b7280 100%)"
-                                  }}
-                                  title={`${task.title} (${dayjs(
-                                    task.start_date
-                                  ).format("MMM D")} → ${dayjs(
-                                    task.due_date
-                                  ).format("MMM D")})`}
-                                >
-                                  {/* Avatar/Initials */}
-                                  {task.assignee && (
-                                    <span className="w-6 h-6 rounded-full bg-white text-blue-600 flex items-center justify-center text-xs font-bold mr-2 border border-blue-200">
-                                      {task.assignee.name
-                                        ? task.assignee.name.split(' ').map(n => n[0]).join('').toUpperCase()
-                                        : "U"}
-                                    </span>
-                                  )}
-                                  <span className="ml-2 text-xs text-white font-semibold truncate">
-                                    {dayjs(task.start_date).format("MMM D")} -{" "}
-                                    {dayjs(task.due_date).format("MMM D")}
-                                  </span>
-                                  <span className="ml-auto mr-2 text-xs text-white">
-                                    {task.status === "done"
-                                      ? "✔️"
-                                      : task.status === "in_progress"
-                                      ? "⏳"
-                                      : ""}
-                                  </span>
-                                  {/* Tooltip */}
-                                  <div className="absolute left-0 top-8 z-50 hidden group-hover:block bg-white border rounded shadow px-3 py-2 text-xs text-gray-700 min-w-[180px]">
-                                    <div className="font-bold">{task.title}</div>
-                                    <div>Status: <span className="capitalize">{task.status.replace("_", " ")}</span></div>
-                                    <div>Start: {dayjs(task.start_date).format("DD MMM YYYY")}</div>
-                                    <div>Due: {dayjs(task.due_date).format("DD MMM YYYY")}</div>
-                                    {task.assignee && <div>Assignee: {task.assignee.name}</div>}
-                                  </div>
-                                </div>
-                              </td>
-                            );
-                          }
-                          // Render empty cell if not in bar range
-                          if (!hasDate || i < startIdx || i > endIdx) {
-                            return (
-                              <td key={i} className="border-b px-0 py-2"></td>
-                            );
-                          }
-                          // Bar already rendered by colSpan
-                          return null;
-                        })}
+                        {Array.from({ length: viewMode === "weekly" ? weeklyDays.length : months.length }).map((_, i) => (
+                          <td key={i} className="border-b px-0 py-2 bg-gray-50"></td>
+                        ))}
                       </tr>
-                    );
-                  })}
+                      {moduleTasks.map((task) => {
+                        const hasDate = task.start_date && task.due_date;
+                        const startIdx = hasDate ? getBarIdx(task.start_date) : -1;
+                        const endIdx = hasDate ? getBarIdx(task.due_date) : -1;
+                        const barLength = getBarLength(startIdx, endIdx);
+                        let count =
+                          viewMode === "weekly"
+                            ? weeklyDays.length
+                            : months.length;
+                        if (viewMode === "quarterly") count = months.length;
+                        return (
+                          <tr key={task.id} className="group hover:bg-blue-50 transition">
+                            {/* Sticky task name */}
+                            <td
+                              className="sticky left-0 z-10 bg-white px-8 py-2 border-b w-72"
+                              style={{
+                                background: "white",
+                                minWidth: 288,
+                                maxWidth: 288,
+                                width: 288,
+                                left: 0,
+                                zIndex: 10
+                              }}
+                            >
+                              <div className="flex flex-col">
+                                <span className="font-medium">{task.title}</span>
+                                <span className="text-xs text-gray-400">
+                                  {task.status === "done"
+                                    ? "✔️"
+                                    : task.status === "in_progress"
+                                    ? "⏳"
+                                    : "•"}{" "}
+                                  {task.status.replace("_", " ")}
+                                </span>
+                              </div>
+                            </td>
+                            {/* Timeline cells */}
+                            {Array.from({ length: count }).map((_, i) => {
+                              // Render bar only on the first cell of the bar
+                              if (hasDate && i === startIdx && barLength > 0) {
+                                return (
+                                  <td
+                                    key={i}
+                                    colSpan={Math.min(barLength, count - startIdx)}
+                                    className="relative px-0 py-2 border-b"
+                                    style={{ padding: 0, background: "transparent" }}
+                                  >
+                                    <div
+                                      className={`h-6 rounded flex items-center shadow group-hover:scale-105 transition-transform duration-150 ${getColor(task.status)}`}
+                                      style={{
+                                        width: `${
+                                          Math.min(barLength, count - startIdx) *
+                                            (viewMode === "weekly" ? 80 : 120) - 4
+                                        }px`,
+                                        minWidth: "28px",
+                                        marginLeft: "2px",
+                                        marginRight: "2px",
+                                        position: "relative",
+                                        background: task.status === "done"
+                                          ? "linear-gradient(90deg, #34d399 0%, #10b981 100%)"
+                                          : task.status === "in_progress"
+                                          ? "linear-gradient(90deg, #60a5fa 0%, #2563eb 100%)"
+                                          : "linear-gradient(90deg, #d1d5db 0%, #6b7280 100%)"
+                                      }}
+                                      title={`${task.title} (${dayjs(
+                                        task.start_date
+                                      ).format("MMM D")} → ${dayjs(
+                                        task.due_date
+                                      ).format("MMM D")})`}
+                                    >
+                                      {/* Avatar/Initials */}
+                                      {task.assignee && (
+                                        <span className="w-6 h-6 rounded-full bg-white text-blue-600 flex items-center justify-center text-xs font-bold mr-2 border border-blue-200">
+                                          {task.assignee.name
+                                            ? task.assignee.name.split(' ').map(n => n[0]).join('').toUpperCase()
+                                            : "U"}
+                                        </span>
+                                      )}
+                                      <span className="ml-2 text-xs text-white font-semibold truncate">
+                                        {dayjs(task.start_date).format("MMM D")} -{" "}
+                                        {dayjs(task.due_date).format("MMM D")}
+                                      </span>
+                                      <span className="ml-auto mr-2 text-xs text-white">
+                                        {task.status === "done"
+                                          ? "✔️"
+                                          : task.status === "in_progress"
+                                          ? "⏳"
+                                          : ""}
+                                      </span>
+                                      {/* Tooltip */}
+                                      <div className="absolute left-0 top-8 z-50 hidden group-hover:block bg-white border rounded shadow px-3 py-2 text-xs text-gray-700 min-w-[180px]">
+                                        <div className="font-bold">{task.title}</div>
+                                        <div>Status: <span className="capitalize">{task.status.replace("_", " ")}</span></div>
+                                        <div>Start: {dayjs(task.start_date).format("DD MMM YYYY")}</div>
+                                        <div>Due: {dayjs(task.due_date).format("DD MMM YYYY")}</div>
+                                        {task.assignee && <div>Assignee: {task.assignee.name}</div>}
+                                      </div>
+                                    </div>
+                                  </td>
+                                );
+                              }
+                              // Render empty cell if not in bar range
+                              if (!hasDate || i < startIdx || i > endIdx) {
+                                return (
+                                  <td key={i} className="border-b px-0 py-2"></td>
+                                );
+                              }
+                              // Bar already rendered by colSpan
+                              return null;
+                            })}
+                          </tr>
+                        );
+                      })}
+                    </React.Fragment>
+                  ))}
                 </React.Fragment>
               ))}
             </tbody>
