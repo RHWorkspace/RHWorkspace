@@ -26,7 +26,7 @@ function getUserWeeklyHoursMap(tasks) {
     const weekly = {};
     tasks.forEach(t => {
         if (
-            ['in_progress'].includes(t.status) &&
+            ['in_progress', 'done'].includes(t.status) && // <-- tambahkan 'done'
             t.estimated_hours &&
             t.start_date &&
             t.due_date
