@@ -134,18 +134,6 @@ function getUserWorkSummary(tasks) {
     };
 }
 
-// Filter tasks by month and week
-function filterTasksByMonthWeek(tasks, filterMonth, filterWeek) {
-    if (!filterMonth && !filterWeek) return tasks;
-    return tasks.filter(t => {
-        if (!t.due_date) return false;
-        const due = new Date(t.due_date);
-        const monthMatch = filterMonth ? (due.getMonth() + 1) === Number(filterMonth) : true;
-        const weekMatch = filterWeek ? getWeekOfMonth(due) === Number(filterWeek) : true;
-        return monthMatch && weekMatch;
-    });
-}
-
 export default function Dashboard() {
     const { auth } = usePage().props;
     const [users, setUsers] = useState([]);
@@ -192,7 +180,10 @@ export default function Dashboard() {
     });
 
     const workload = users.map(user => {
-        const userTasks = filteredTasks.filter(task => String(task.assignment_id) === String(user.id));
+        // Tambahkan filter bulan/minggu di sini
+        let userTasks = filteredTasks.filter(task => String(task.assignment_id) === String(user.id));
+        userTasks = filterTasksByMonthWeek(userTasks, filterMonth, filterWeek);
+
         const weeklyMap = getUserWeeklyHoursMap(userTasks);
         const overload = Object.values(weeklyMap).some(jam => jam > 40);
         const weeklyHours = getUserCurrentWeekHours(userTasks);
@@ -744,4 +735,16 @@ export default function Dashboard() {
             `}</style>
         </AuthenticatedLayout>
     );
+}
+
+// Tambahan fungsi filter berdasarkan bulan dan minggu
+function filterTasksByMonthWeek(tasks, filterMonth, filterWeek) {
+    if (!filterMonth && !filterWeek) return tasks;
+    return tasks.filter(t => {
+        if (!t.due_date) return false;
+        const due = new Date(t.due_date);
+        const monthMatch = filterMonth ? (due.getMonth() + 1) === Number(filterMonth) : true;
+        const weekMatch = filterWeek ? getWeekOfMonth(due) === Number(filterWeek) : true;
+        return monthMatch && weekMatch;
+    });
 }
