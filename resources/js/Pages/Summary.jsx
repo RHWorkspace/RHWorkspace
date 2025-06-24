@@ -1,9 +1,8 @@
-import React from 'react';
-import { useEffect, useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout';
 import { Head, usePage } from '@inertiajs/react';
 import axios from 'axios';
-import { FaUserFriends, FaProjectDiagram, FaTasks, FaDownload, FaFilter } from 'react-icons/fa';
+import { FaUserFriends, FaProjectDiagram, FaTasks, FaDownload } from 'react-icons/fa';
 
 function Card({ label, value, color, icon }) {
   const colors = {
@@ -49,7 +48,10 @@ export default function Summary() {
   const [showModules, setShowModules] = useState({});
   const [projectSummaryFilter, setProjectSummaryFilter] = useState('');
   const [showMemberTasks, setShowMemberTasks] = useState({});
-  
+  // Working hours filter state
+  const [workingHoursNameFilter, setWorkingHoursNameFilter] = useState('');
+  const [workingHoursYearFilter, setWorkingHoursYearFilter] = useState(new Date().getFullYear());
+  const [workingHoursMonthFilter, setWorkingHoursMonthFilter] = useState(new Date().getMonth() + 1);
 
   useEffect(() => {
     setLoading(true);
@@ -72,7 +74,7 @@ export default function Summary() {
   const summary = {
     all: tasks.length,
     todo: tasks.filter(t => t.status === 'todo').length,
-    inprogress: tasks.filter(t => t.status === 'in_progress').length, // konsisten
+    inprogress: tasks.filter(t => t.status === 'in_progress').length,
     done: tasks.filter(t => t.status === 'done').length,
   };
 
@@ -100,9 +102,9 @@ export default function Summary() {
     if (!a.due_date) return 1;
     if (!b.due_date) return -1;
     return new Date(a.due_date) - new Date(b.due_date);
-  }).filter(task => 
+  }).filter(task =>
     !searchQuery || task.title?.toLowerCase().includes(searchQuery.toLowerCase())
-  ); // filter by search
+  );
 
   // Timeline: urutkan semua task berdasarkan created_at (terbaru di atas)
   const timelineTasks = [...tasks]
@@ -133,9 +135,9 @@ export default function Summary() {
     const a = document.createElement('a');
     a.href = url;
     a.download = 'tasks-summary.csv';
-    document.body.appendChild(a); // Tambah ini
+    document.body.appendChild(a);
     a.click();
-    document.body.removeChild(a); // Tambah ini
+    document.body.removeChild(a);
     URL.revokeObjectURL(url);
   };
 
@@ -151,11 +153,9 @@ export default function Summary() {
       todo,
       inprogress,
       done,
-      is_available: inprogress === 0, // available jika tidak ada task in progress
+      is_available: inprogress === 0,
     };
-  })
-  // Urutkan berdasarkan nama A-Z
-  .sort((a, b) => (a.name || '').localeCompare(b.name || ''));
+  }).sort((a, b) => (a.name || '').localeCompare(b.name || ''));
 
   // Filtered memberTaskSummary
   const filteredMemberTaskSummary = memberTaskSummary.filter(member => {
@@ -173,7 +173,7 @@ export default function Summary() {
     return matchName && matchStatus && matchProject;
   });
 
-  // Tambahkan fungsi untuk membuat recent actions
+  // Recent actions
   const recentActions = [
     ...tasks.map(task => ({
       type: 'task',
@@ -202,6 +202,49 @@ export default function Summary() {
       [projectId]: !prev[projectId],
     }));
   };
+
+  // --- Member Working Hours Summary (REAL from tasks) ---
+  const months = [
+    'January', 'February', 'March', 'April', 'May', 'June',
+    'July', 'August', 'September', 'October', 'November', 'December'
+  ];
+  const currentYear = new Date().getFullYear();
+  const years = [currentYear - 1, currentYear];
+
+  // Helper: hitung total jam kerja per user per tahun/bulan dari tasks
+  function getTotalHoursByYear(userId, year) {
+    return tasks
+      .filter(
+        t =>
+          t.assignment_id === userId &&
+          t.estimated_hours &&
+          t.due_date &&
+          new Date(t.due_date).getFullYear() === year
+      )
+      .reduce((sum, t) => sum + Number(t.estimated_hours), 0);
+  }
+  function getHoursByYearMonth(userId, year, month) {
+    return tasks
+      .filter(
+        t =>
+          t.assignment_id === userId &&
+          t.estimated_hours &&
+          t.due_date &&
+          new Date(t.due_date).getFullYear() === year &&
+          new Date(t.due_date).getMonth() + 1 === month
+      )
+      .reduce((sum, t) => sum + Number(t.estimated_hours), 0);
+  }
+
+  // Filtered & sorted Working Hours (urutkan dari total tertinggi)
+  const filteredMemberWorkingHours = users
+    .filter(member =>
+      (!workingHoursNameFilter ||
+        member.name?.toLowerCase().includes(workingHoursNameFilter.toLowerCase()))
+    )
+    .sort((a, b) =>
+      getTotalHoursByYear(b.id, workingHoursYearFilter) - getTotalHoursByYear(a.id, workingHoursYearFilter)
+    );
 
   return (
     <AuthenticatedLayout header={
@@ -337,48 +380,6 @@ export default function Summary() {
                         </div>
                         <span className="text-xs text-gray-500 w-10 text-right">{percentDone}%</span>
                       </div>
-                      {/* MODULE INFO */}
-                      {Array.isArray(project.modules) && project.modules.length > 0 && (
-                        <div className="mt-1">
-                          <button
-                            className="text-blue-500 underline hover:text-blue-700 text-xs mb-1"
-                            onClick={() => toggleShowModules(project.id)}
-                            type="button"
-                          >
-                            {showModules[project.id] ? 'Hide Modules' : 'Show Modules'}
-                          </button>
-                          {showModules[project.id] && (
-                            <div className="flex flex-col gap-1">
-                              {project.modules.map(mod => {
-                                const moduleTasks = tasks.filter(
-                                  t => String(t.project_id) === String(project.id) && String(t.module_id) === String(mod.id)
-                                );
-                                const total = moduleTasks.length;
-                                const done = moduleTasks.filter(t => t.status === 'done').length;
-                                const percent = total === 0 ? 0 : Math.round((done / total) * 100);
-
-                                return (
-                                  <div key={mod.id}>
-                                    <div className="flex items-center gap-2">
-                                      <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold border bg-purple-50 text-purple-700 border-purple-200">
-                                        {mod.name}
-                                      </span>
-                                      <span className="text-xs text-gray-500">{done}/{total} done</span>
-                                      <span className="text-xs text-purple-700 font-bold">{percent}%</span>
-                                    </div>
-                                    <div className="h-2 bg-purple-100 rounded overflow-hidden mt-1 mb-1">
-                                      <div
-                                        className="h-2 bg-gradient-to-r from-purple-400 to-purple-600 rounded"
-                                        style={{ width: `${percent}%`, transition: 'width 0.4s' }}
-                                      />
-                                    </div>
-                                  </div>
-                                );
-                              })}
-                            </div>
-                          )}
-                        </div>
-                      )}
                     </li>
                   );
                 })}
@@ -450,126 +451,89 @@ export default function Summary() {
                   <th className="py-2 px-3 text-center">In Progress</th>
                   <th className="py-2 px-3 text-center">Done</th>
                   <th className="py-2 px-3 text-center">Total</th>
-                  <th className="py-2 px-3 text-center">Progress</th>
                   <th className="py-2 px-3 text-center">Status</th>
                 </tr>
               </thead>
               <tbody>
-                {users
-                  .filter(member => !memberFilter || member.name?.toLowerCase().includes(memberFilter.toLowerCase()))
-                  .sort((a, b) => (a.name || '').localeCompare(b.name || ''))
-                  .map(member => {
-                    // Filter tasks sesuai project/status
-                    let memberTasks = tasks.filter(t => t.assignment_id === member.id);
-                    if (projectFilter) {
-                      memberTasks = memberTasks.filter(t => String(t.project_id) === String(projectFilter));
-                    }
-                    // Hitung jumlah per status
-                    const todo = memberTasks.filter(t => t.status === 'todo').length;
-                    const inprogress = memberTasks.filter(t => t.status === 'in_progress').length;
-                    const done = memberTasks.filter(t => t.status === 'done').length;
-                    const total = memberTasks.length;
-                    // Jika filter status, hanya tampilkan jumlah pada status tsb, lainnya 0
-                    const showTodo = !statusFilter || statusFilter === 'todo' ? todo : 0;
-                    const showInprogress = !statusFilter || statusFilter === 'in_progress' ? inprogress : 0;
-                    const showDone = !statusFilter || statusFilter === 'done' ? done : 0;
-                    const showTotal = showTodo + showInprogress + showDone;
-                    const percentDone = showTotal > 0 ? Math.round((showDone / showTotal) * 100) : 0;
-                    const isAvailable = showInprogress === 0;
-                    // Hanya tampilkan baris jika showTotal > 0 atau tidak ada filter status/project
-                    if (
-                      (statusFilter || projectFilter)
-                        ? showTotal > 0
-                        : true
-                    ) {
-                      return (
-                        <React.Fragment key={member.id}>
-                          <tr className="hover:bg-blue-50 transition-all">
-                            {/* Action Button */}
-                            <td className="py-2 px-3 text-center align-top">
-                              <button
-                                className="bg-blue-100 hover:bg-blue-200 text-blue-700 font-bold rounded-full w-7 h-7 flex items-center justify-center text-lg transition"
-                                onClick={() =>
-                                  setShowMemberTasks(prev => ({
-                                    ...prev,
-                                    [member.id]: !prev[member.id],
-                                  }))
-                                }
-                                title={showMemberTasks[member.id] ? 'Hide Tasks' : 'Show Tasks'}
-                                type="button"
-                              >
-                                {showMemberTasks[member.id] ? '−' : '+'}
-                              </button>
-                            </td>
-                            <td className="py-2 px-3 font-semibold">{member.name}</td>
-                            <td className="py-2 px-3 text-center">{showTodo}</td>
-                            <td className="py-2 px-3 text-center">{showInprogress}</td>
-                            <td className="py-2 px-3 text-center">{showDone}</td>
-                            <td className="py-2 px-3 text-center">{showTotal}</td>
-                            <td className="py-2 px-3 text-center">
-                              <div className="flex items-center gap-2">
-                                <div className="flex-1 h-2 bg-gray-200 rounded-full overflow-hidden w-20">
-                                  <div
-                                    className={`h-2 rounded-full transition-all duration-300
-                                      ${percentDone === 100 ? 'bg-emerald-400' : 'bg-blue-400'}
-                                    `}
-                                    style={{ width: `${percentDone}%` }}
-                                  ></div>
-                                </div>
-                                <span className="text-xs text-gray-700 w-8">{percentDone}%</span>
-                              </div>
-                            </td>
-                            <td className="py-2 px-3 text-center">
-                              <span className={`inline-block text-xs px-2 py-0.5 rounded-full font-semibold border
-                                ${isAvailable
-                                  ? 'bg-emerald-100 text-emerald-700 border-emerald-200'
-                                  : 'bg-rose-100 text-rose-700 border-rose-200'}
-                              `}>
-                                {isAvailable ? 'Available' : 'Busy'}
-                              </span>
-                            </td>
-                          </tr>
-                          {/* TASK LIST ROW */}
-                          {showMemberTasks[member.id] && (
-                            <tr>
-                              <td colSpan={8} className="bg-blue-50 px-6 py-3">
-                                {memberTasks.length > 0 ? (
-                                  <ul className="list-disc ml-6 flex flex-col gap-1">
-                                    {memberTasks.map(task => (
-                                      <li key={task.id} className="flex items-center gap-2">
-                                        <span className="font-semibold">{task.title}</span>
-                                        <span className="text-xs text-gray-500">
-                                          ({projects.find(p => p.id === task.project_id)?.name || '-'})
-                                        </span>
-                                        <span className={`text-xs px-2 py-0.5 rounded-full font-semibold border
-                                          ${task.status === 'done'
-                                            ? 'bg-emerald-100 text-emerald-700 border-emerald-200'
-                                            : task.status === 'in_progress'
-                                            ? 'bg-orange-100 text-orange-700 border-orange-200'
-                                            : 'bg-gray-100 text-gray-700 border-gray-200'}
-                                        `}>
-                                          {task.status.replace('_', ' ').toUpperCase()}
-                                        </span>
-                                        <span className="text-xs text-gray-400">
-                                          Due: {task.due_date || '-'}
-                                        </span>
-                                      </li>
-                                    ))}
-                                  </ul>
-                                ) : (
-                                  <div className="text-xs text-gray-400 italic mt-1">No tasks</div>
-                                )}
-                              </td>
-                            </tr>
-                          )}
-                        </React.Fragment>
-                      );
-                    }
-                    return null;
-                  })}
+                {filteredMemberTaskSummary.length === 0 && (
+                  <tr>
+                    <td colSpan={7} className="text-center text-gray-400 py-4">No data.</td>
+                  </tr>
+                )}
+                {filteredMemberTaskSummary.map(member => {
+                  const memberTasks = tasks.filter(t => t.assignment_id === member.id);
+                  return (
+                    <React.Fragment key={member.id}>
+                      <tr className="hover:bg-blue-50 transition-all">
+                        <td className="py-2 px-3 text-center align-top">
+                          <button
+                            className="bg-blue-100 hover:bg-blue-200 text-blue-700 font-bold rounded-full w-7 h-7 flex items-center justify-center text-lg transition"
+                            onClick={() =>
+                              setShowMemberTasks(prev => ({
+                                ...prev,
+                                [member.id]: !prev[member.id],
+                              }))
+                            }
+                            title={showMemberTasks[member.id] ? 'Hide Tasks' : 'Show Tasks'}
+                            type="button"
+                          >
+                            {showMemberTasks[member.id] ? '−' : '+'}
+                          </button>
+                        </td>
+                        <td className="py-2 px-3 font-semibold">{member.name}</td>
+                        <td className="py-2 px-3 text-center">{member.todo}</td>
+                        <td className="py-2 px-3 text-center">{member.inprogress}</td>
+                        <td className="py-2 px-3 text-center">{member.done}</td>
+                        <td className="py-2 px-3 text-center">{member.total}</td>
+                        <td className="py-2 px-3 text-center">
+                          <span className={`inline-block text-xs px-2 py-0.5 rounded-full font-semibold border
+                            ${member.is_available
+                              ? 'bg-emerald-100 text-emerald-700 border-emerald-200'
+                              : 'bg-rose-100 text-rose-700 border-rose-200'}
+                          `}>
+                            {member.is_available ? 'Available' : 'Busy'}
+                          </span>
+                        </td>
+                      </tr>
+                      {showMemberTasks[member.id] && (
+                        <tr>
+                          <td colSpan={7} className="bg-blue-50 px-6 py-3">
+                            {memberTasks.length > 0 ? (
+                              <ul className="list-disc ml-6 flex flex-col gap-1">
+                                {memberTasks.map(task => (
+                                  <li key={task.id} className="flex items-center gap-2">
+                                    <span className="font-semibold">{task.title}</span>
+                                    <span className="text-xs text-gray-500">
+                                      ({projects.find(p => p.id === task.project_id)?.name || '-'})
+                                    </span>
+                                    <span className={`text-xs px-2 py-0.5 rounded-full font-semibold border
+                                      ${task.status === 'done'
+                                        ? 'bg-emerald-100 text-emerald-700 border-emerald-200'
+                                        : task.status === 'in_progress'
+                                        ? 'bg-orange-100 text-orange-700 border-orange-200'
+                                        : 'bg-gray-100 text-gray-700 border-gray-200'}
+                                    `}>
+                                      {task.status.replace('_', ' ').toUpperCase()}
+                                    </span>
+                                    <span className="text-xs text-gray-400">
+                                      Due: {task.due_date || '-'}
+                                    </span>
+                                  </li>
+                                ))}
+                              </ul>
+                            ) : (
+                              <div className="text-xs text-gray-400 italic mt-1">No tasks</div>
+                            )}
+                          </td>
+                        </tr>
+                      )}
+                    </React.Fragment>
+                  );
+                })}
               </tbody>
             </table>
           </div>
+
           {/* Project Task Summary */}
           <div className="bg-white rounded-xl shadow p-6 border border-green-100 mb-8 overflow-x-auto">
             <h2 className="text-lg font-semibold mb-4 text-green-800 flex items-center gap-2">
@@ -615,7 +579,6 @@ export default function Summary() {
                     return (
                       <React.Fragment key={project.id}>
                         <tr className="hover:bg-green-50 transition-all">
-                          {/* Action Button */}
                           <td className="py-2 px-3 text-center align-top">
                             <button
                               className="bg-purple-100 hover:bg-purple-200 text-purple-700 font-bold rounded-full w-7 h-7 flex items-center justify-center text-lg transition"
@@ -631,7 +594,6 @@ export default function Summary() {
                               {showModules[project.id] ? '−' : '+'}
                             </button>
                           </td>
-                          {/* Project Info */}
                           <td className="py-2 px-3 align-top">
                             <div className="font-bold text-green-900 mb-1">{project.name}</div>
                           </td>
@@ -657,12 +619,11 @@ export default function Summary() {
                               ${isDone
                                 ? 'bg-emerald-100 text-emerald-700 border-emerald-200'
                                 : 'bg-orange-100 text-orange-700 border-orange-200'}
-                        `}>
+                            `}>
                               {isDone ? 'Done' : 'On Progress'}
                             </span>
                           </td>
                         </tr>
-                        {/* MODULE LIST ROW */}
                         {showModules[project.id] && (
                           <tr>
                             <td colSpan={8} className="bg-purple-50 px-6 py-3">
@@ -738,52 +699,75 @@ export default function Summary() {
               </tbody>
             </table>
           </div>
+
           {/* Filter/Search Task */}
-          <div className="flex flex-col sm:flex-row items-center gap-2 mt-8 mb-2">
-            <input
-              type="text"
-              placeholder="Search task title..."
-              className="border rounded-lg px-3 py-2 w-full sm:w-60 shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-200 transition"
-              value={searchQuery}
-              onChange={e => setSearchQuery(e.target.value)}
-            />
-            <span className="text-xs text-gray-500">Type to filter tasks</span>
-          </div>
+          {/* ...existing code for search task... */}
+
           {/* Semua Task, urut due date, highlight overdue */}
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mt-2">
-            <div className="bg-white rounded-xl shadow p-6 md:col-span-2 border border-orange-100 w-full">
-              <h2 className="text-lg font-semibold mb-4 text-orange-800">All Tasks (by Due Date)</h2>
-              {loading ? (
-                <div className="text-gray-400">Loading...</div>
-              ) : (
-                <ul className="space-y-3 text-sm max-h-64 overflow-y-auto">
-                  {sortedTasks.length === 0 && (
-                    <li className="text-gray-400">No tasks.</li>
-                  )}
-                  {sortedTasks.map((task) => {
-                    const isOverdue = task.due_date && new Date(task.due_date) < new Date() && task.status !== 'done';
-                    return (
-                      <li key={task.id} className={`flex items-center gap-3 ${isOverdue ? 'bg-red-50' : 'hover:bg-orange-50'} rounded-lg px-3 py-2 transition-all`}>
-                        <div className="w-8 h-8 rounded-full bg-orange-200 text-orange-800 flex items-center justify-center font-bold text-base shadow">
-                          {task.title?.[0] || '?'}
-                        </div>
-                        <div>
-                          <div className="font-semibold">{task.title}</div>
-                          <div className="text-xs text-gray-500">
-                            Project: {projects.find(p => p.id === task.project_id)?.name || '-'}<br />
-                            Assigned: {users.find(u => u.id === task.assignment_id)?.name || '-'}
-                          </div>
-                        </div>
-                        <div className={`ml-auto text-xs ${isOverdue ? 'text-red-700 font-bold' : 'text-gray-700'}`}>
-                          Due: {task.due_date || '-'}
-                          {isOverdue && <span className="ml-2 text-xs bg-red-200 text-red-800 px-2 py-0.5 rounded">Overdue</span>}
-                        </div>
-                      </li>
-                    );
-                  })}
-                </ul>
-              )}
+          {/* ...existing code for all tasks... */}
+
+          {/* Member Working Hours Summary */}
+          <div className="bg-white rounded-xl shadow p-6 border border-blue-100 mb-8 overflow-x-auto">
+            <h2 className="text-lg font-semibold mb-4 text-blue-800 flex items-center gap-2">
+              <FaUserFriends className="text-blue-400" /> Member Working Hours Summary
+            </h2>
+            {/* Filter by Name, Year, Month */}
+            <div className="mb-4 flex flex-col sm:flex-row gap-2">
+              <input
+                type="text"
+                placeholder="Filter by member name..."
+                className="border rounded-lg px-3 py-2 w-full sm:w-60 shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-200 transition"
+                value={workingHoursNameFilter}
+                onChange={e => setWorkingHoursNameFilter(e.target.value)}
+              />
+              <select
+                className="border rounded-lg px-3 py-2 w-full sm:w-40 shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-200 transition"
+                value={workingHoursYearFilter}
+                onChange={e => setWorkingHoursYearFilter(Number(e.target.value))}
+              >
+                {years.map(y => (
+                  <option key={y} value={y}>{y}</option>
+                ))}
+              </select>
+              <select
+                className="border rounded-lg px-3 py-2 w-full sm:w-40 shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-200 transition"
+                value={workingHoursMonthFilter}
+                onChange={e => setWorkingHoursMonthFilter(Number(e.target.value))}
+              >
+                {months.map((m, idx) => (
+                  <option key={idx + 1} value={idx + 1}>{m}</option>
+                ))}
+              </select>
             </div>
+            <table className="min-w-full text-sm border rounded-xl overflow-hidden">
+              <thead className="bg-blue-100 text-blue-800">
+                <tr>
+                  <th className="py-2 px-3 text-left">Name</th>
+                  <th className="py-2 px-3 text-center">Total Hours ({workingHoursYearFilter})</th>
+                  <th className="py-2 px-3 text-center">
+                    {months[workingHoursMonthFilter - 1]} Hours
+                  </th>
+                </tr>
+              </thead>
+              <tbody>
+                {filteredMemberWorkingHours.length === 0 && (
+                  <tr>
+                    <td colSpan={3} className="text-center text-gray-400 py-4">No data.</td>
+                  </tr>
+                )}
+                {filteredMemberWorkingHours.map(member => (
+                  <tr key={member.id} className="hover:bg-blue-50 transition-all">
+                    <td className="py-2 px-3 font-semibold">{member.name}</td>
+                    <td className="py-2 px-3 text-center">
+                      {getTotalHoursByYear(member.id, workingHoursYearFilter)}
+                    </td>
+                    <td className="py-2 px-3 text-center">
+                      {getHoursByYearMonth(member.id, workingHoursYearFilter, workingHoursMonthFilter)}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
           </div>
         </div>
       </div>

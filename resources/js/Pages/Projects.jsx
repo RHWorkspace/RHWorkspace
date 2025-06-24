@@ -623,7 +623,7 @@ export default function Projects() {
                   >
                     <option value="">Select user</option>
                     {users
-                      .filter(u => !memberModalProject.members?.some(m => m.id === u.id) && u.id !== memberModalProject.owner)
+                      .filter(u => !memberModalProject.members?.some(m => m.id === u.id))
                       .map(u => (
                         <option key={u.id} value={u.id}>{u.name} ({u.email})</option>
                       ))}
@@ -687,7 +687,8 @@ export default function Projects() {
               <h3 className="text-2xl font-extrabold mb-6 text-purple-700 flex items-center gap-2 tracking-tight">
                 Manage Modules - {moduleModalProject.name}
               </h3>
-              <div className="mb-4">
+              {/* Tambahkan max-h dan overflow-y-auto di sini */}
+              <div className="mb-4 max-h-72 overflow-y-auto pr-2">
                 <div className="font-semibold mb-2 text-gray-700">Current Modules:</div>
                 <div className="flex flex-col gap-2">
                   {modules.length > 0 ? (
@@ -929,7 +930,7 @@ export default function Projects() {
                       </button>
                     </div>
                     {showModules[project.id] && (
-                      <div className="flex flex-col gap-1">
+                      <div className="flex flex-col gap-1 max-h-60 overflow-y-auto pr-1">
                         {(project.modules || []).length > 0 ? (
                           project.modules.map((mod) => {
                             // Hitung summary task per module
