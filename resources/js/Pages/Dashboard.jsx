@@ -26,7 +26,7 @@ function getUserWeeklyHoursMap(tasks) {
     const weekly = {};
     tasks.forEach(t => {
         if (
-            ['todo', 'in_progress'].includes(t.status) &&
+            ['in_progress'].includes(t.status) &&
             t.estimated_hours &&
             t.start_date &&
             t.due_date
@@ -76,7 +76,7 @@ function getUserCurrentWeekHours(tasks) {
     let total = 0;
     tasks.forEach(t => {
         if (
-            ['todo', 'in_progress'].includes(t.status) &&
+            ['in_progress', 'done'].includes(t.status) && // <-- tambahkan 'done'
             t.estimated_hours &&
             t.due_date
         ) {
@@ -92,25 +92,39 @@ function getUserCurrentWeekHours(tasks) {
 }
 
 function getUserWorkSummary(tasks) {
+    // Hanya task in_progress
     const activeTasks = tasks.filter(
         t => t.status === 'in_progress' && t.estimated_hours && t.due_date
     );
     const totalHours = activeTasks.reduce((sum, t) => sum + Number(t.estimated_hours || 0), 0);
-    const totalRemaining = activeTasks.reduce(
-        (sum, t) =>
-            sum +
-            (typeof t.remaining_hours !== 'undefined' && t.remaining_hours !== null
-                ? Number(t.remaining_hours)
-                : Number(t.estimated_hours || 0)),
-        0
-    );
+
+    // Hitung total jam minggu ini untuk semua task in_progress & done
+    const now = new Date();
+    const currentYear = now.getFullYear();
+    const currentWeek = getWeekNumber(now);
+    const totalWeekHours = tasks.reduce((sum, t) => {
+        if (
+            ['in_progress', 'done'].includes(t.status) &&
+            t.estimated_hours &&
+            t.due_date
+        ) {
+            const date = new Date(t.due_date);
+            const year = date.getFullYear();
+            const week = getWeekNumber(date);
+            if (year === currentYear && week === currentWeek) {
+                return sum + Number(t.estimated_hours) || 0;
+            }
+        }
+        return sum;
+    }, 0);
+
+    // Sisa jam minggu ini (max 40 jam)
     const dailyCapacity = 8;
     const weeklyCapacity = dailyCapacity * 5;
-    const now = new Date();
-    const availableHours = Math.max(0, weeklyCapacity - totalRemaining);
+    const availableHours = Math.max(0, weeklyCapacity - totalWeekHours);
 
-    // Next available (hanya hari kerja)
-    let sisa = totalRemaining;
+    // Next available (sudah sesuai)
+    let sisa = totalWeekHours;
     let current = new Date(now);
     let availableDate = null;
     if (sisa === 0) {
@@ -128,9 +142,10 @@ function getUserWorkSummary(tasks) {
         }
     }
     return {
-        totalHours,
+        totalHours, // hanya in_progress
         availableHours,
         availableDate,
+        totalWeekHours, // in_progress + done minggu ini
     };
 }
 
@@ -187,7 +202,7 @@ export default function Dashboard() {
         const weeklyMap = getUserWeeklyHoursMap(userTasks);
         const overload = Object.values(weeklyMap).some(jam => jam > 40);
         const weeklyHours = getUserCurrentWeekHours(userTasks);
-        const { totalHours, availableHours, availableDate } = getUserWorkSummary(userTasks);
+        const { totalHours, availableHours, availableDate, totalWeekHours } = getUserWorkSummary(userTasks);
 
         return {
             user,
@@ -207,6 +222,7 @@ export default function Dashboard() {
             totalHours,
             availableHours,
             availableDate,
+            totalWeekHours,
         };
     })
     .filter(w => w.total > 0 || (!filterUser && !filterStatus && !filterProject))
@@ -650,9 +666,9 @@ export default function Dashboard() {
                                             </span>
                                         </div>
                                         <div className="flex items-center mb-1">
-                                            <span className="text-xs font-medium text-gray-500 mr-2">Total Jam Minggu Ini:</span>
+                                            <span className="text-xs font-medium text-gray-500 mr-2">Working Hours This Week:</span>
                                             <span className={`text-xs font-bold ${isOverloadThisWeek ? 'text-red-700' : 'text-indigo-700'}`}>
-                                                {jamMingguIni} jam
+                                                {w.totalWeekHours} jam
                                             </span>
                                         </div>
                                     </div>
