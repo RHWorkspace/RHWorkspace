@@ -24,6 +24,7 @@ export default function Task() {
   const currentUser = auth?.user;
 
   const [tasks, setTasks] = useState([]);
+  const [searchTerm, setSearchTerm] = useState('');
   const [projects, setProjects] = useState([]);
   const [users, setUsers] = useState([]);
   const [form, setForm] = useState({
@@ -453,6 +454,15 @@ export default function Task() {
       const week = getWeekOfMonth(t.start_date);
       if (String(week) !== String(filterWeek)) return false;
     }
+    if (
+      searchTerm &&
+      !(
+        (t.title && t.title.toLowerCase().includes(searchTerm.toLowerCase())) ||
+        (t.description && t.description.toLowerCase().includes(searchTerm.toLowerCase()))
+      )
+    ) {
+      return false;
+    }
     return true;
   });
 
@@ -658,6 +668,28 @@ export default function Task() {
               <option value="5">Week 5</option>
             </select>
           </div>
+        </div>
+        {/* Search Bar */}
+        <div className="mb-4 flex items-center gap-2">
+          <input
+            type="text"
+            className="border rounded px-3 py-2 min-w-[260px] max-w-md"
+            placeholder="Search task title or description..."
+            value={searchTerm}
+            onChange={e => setSearchTerm(e.target.value)}
+          />
+          {searchTerm && (
+            <button
+              className="ml-2 text-gray-500 hover:text-red-500"
+              onClick={() => setSearchTerm('')}
+              title="Clear search"
+              type="button"
+            >
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+              </svg>
+            </button>
+          )}
         </div>
         {/* Notification */}
         <Transition

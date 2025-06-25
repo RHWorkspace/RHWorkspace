@@ -268,12 +268,27 @@ export default function Projects() {
     const todo = projectTasks.filter(t => t.status === 'todo').length;
     const inProgress = projectTasks.filter(t => t.status === 'in_progress').length;
     const done = projectTasks.filter(t => t.status === 'done').length;
+
     const now = new Date();
-    const overdue = projectTasks.filter(
-      t => t.status !== 'done' && t.due_date && new Date(t.due_date) < now
-    ).length;
+    // Set jam ke 0 agar hanya membandingkan tanggal
+    const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+
+    const overdue = projectTasks.filter(t => {
+      if (t.status === 'done' || !t.due_date) return false;
+      const due = new Date(t.due_date);
+      const dueDate = new Date(due.getFullYear(), due.getMonth(), due.getDate());
+      return dueDate < today;
+    }).length;
+
+    const todayCount = projectTasks.filter(t => {
+      if (t.status === 'done' || !t.due_date) return false;
+      const due = new Date(t.due_date);
+      const dueDate = new Date(due.getFullYear(), due.getMonth(), due.getDate());
+      return dueDate.getTime() === today.getTime();
+    }).length;
+
     const percent = total === 0 ? 0 : Math.round((done / total) * 100);
-    return { total, todo, inProgress, done, overdue, percent };
+    return { total, todo, inProgress, done, overdue, today: todayCount, percent };
   };
 
   const toggleShowMembers = (projectId) => {
@@ -908,6 +923,7 @@ export default function Projects() {
                       <span className="bg-yellow-100 px-2 py-0.5 rounded-full">In Progress: <b>{stats.inProgress}</b></span>
                       <span className="bg-green-100 px-2 py-0.5 rounded-full">Done: <b>{stats.done}</b></span>
                       <span className="bg-red-100 px-2 py-0.5 rounded-full text-red-700">Overdue: <b>{stats.overdue}</b></span>
+                      <span className="bg-orange-100 px-2 py-0.5 rounded-full text-orange-700">Today: <b>{stats.today}</b></span>
                     </div>
                   </div>
                   {/* Module Info */}

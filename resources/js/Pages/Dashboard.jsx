@@ -234,17 +234,26 @@ export default function Dashboard() {
             )
             .reduce((sum, t) => sum + Number(t.estimated_hours || 0), 0);
 
+        const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+
         return {
             user,
             total: userTasks.length,
             todo: userTasks.filter(t => t.status === 'todo').length,
             in_progress: userTasks.filter(t => t.status === 'in_progress').length,
             done: userTasks.filter(t => t.status === 'done').length,
-            overdue: userTasks.filter(t =>
-                (t.status !== 'done') &&
-                t.due_date &&
-                new Date(t.due_date) < new Date()
-            ).length,
+            overdue: userTasks.filter(t => {
+                if (t.status === 'done' || !t.due_date) return false;
+                const due = new Date(t.due_date);
+                const dueDate = new Date(due.getFullYear(), due.getMonth(), due.getDate());
+                return dueDate < today;
+            }).length,
+            today: userTasks.filter(t => {
+                if (t.status === 'done' || !t.due_date) return false;
+                const due = new Date(t.due_date);
+                const dueDate = new Date(due.getFullYear(), due.getMonth(), due.getDate());
+                return dueDate.getTime() === today.getTime();
+            }).length,
             overload,
             weeklyMap,
             weeklyHours,
@@ -297,12 +306,23 @@ export default function Dashboard() {
         ) {
             if (statusClickFilter.status === 'overdue') {
                 const now = new Date();
-                return w.tasks.filter(
-                    t =>
-                        t.status !== 'done' &&
-                        t.due_date &&
-                        new Date(t.due_date) < now
-                );
+                const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+                return w.tasks.filter(t => {
+                    if (t.status === 'done' || !t.due_date) return false;
+                    const due = new Date(t.due_date);
+                    const dueDate = new Date(due.getFullYear(), due.getMonth(), due.getDate());
+                    return dueDate < today;
+                });
+            }
+            if (statusClickFilter.status === 'today') {
+                const now = new Date();
+                const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+                return w.tasks.filter(t => {
+                    if (t.status === 'done' || !t.due_date) return false;
+                    const due = new Date(t.due_date);
+                    const dueDate = new Date(due.getFullYear(), due.getMonth(), due.getDate());
+                    return dueDate.getTime() === today.getTime();
+                });
             }
             return w.tasks.filter(t => t.status === statusClickFilter.status);
         }
@@ -601,6 +621,13 @@ export default function Dashboard() {
                                             onClick={() => handleStatusClick(w.user?.id, 'todo')}
                                         >
                                             To Do: {w.todo}
+                                        </button>
+                                        <button
+                                            type="button"
+                                            className="bg-orange-200 text-orange-900 px-2 py-1 rounded text-xs font-semibold hover:bg-orange-300 transition"
+                                            onClick={() => handleStatusClick(w.user?.id, 'today')}
+                                        >
+                                            Today: {w.today}
                                         </button>
                                         <button
                                             type="button"
