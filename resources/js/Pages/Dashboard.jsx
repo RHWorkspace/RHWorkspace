@@ -204,6 +204,36 @@ export default function Dashboard() {
         const weeklyHours = getUserCurrentWeekHours(userTasks);
         const { totalHours, availableHours, availableDate, totalWeekHours } = getUserWorkSummary(userTasks);
 
+        const now = new Date();
+        const currentYear = now.getFullYear();
+        const currentWeek = getWeekNumber(now);
+
+        // Jam in_progress minggu ini
+        const inProgressHours = userTasks
+            .filter(t =>
+                t.status === 'in_progress' &&
+                t.estimated_hours &&
+                t.due_date &&
+                (() => {
+                    const date = new Date(t.due_date);
+                    return date.getFullYear() === currentYear && getWeekNumber(date) === currentWeek;
+                })()
+            )
+            .reduce((sum, t) => sum + Number(t.estimated_hours || 0), 0);
+
+        // Jam done minggu ini
+        const doneHours = userTasks
+            .filter(t =>
+                t.status === 'done' &&
+                t.estimated_hours &&
+                t.due_date &&
+                (() => {
+                    const date = new Date(t.due_date);
+                    return date.getFullYear() === currentYear && getWeekNumber(date) === currentWeek;
+                })()
+            )
+            .reduce((sum, t) => sum + Number(t.estimated_hours || 0), 0);
+
         return {
             user,
             total: userTasks.length,
@@ -223,6 +253,8 @@ export default function Dashboard() {
             availableHours,
             availableDate,
             totalWeekHours,
+            inProgressHours,
+            doneHours,
         };
     })
     .filter(w => w.total > 0 || (!filterUser && !filterStatus && !filterProject))
@@ -613,16 +645,30 @@ export default function Dashboard() {
                                             Working Hours:
                                         </div>
                                         <div className="flex items-center mb-1">
-                                            <div className="w-full bg-gray-200 rounded-full h-2.5 mr-2">
+                                            <div className="w-full bg-gray-200 rounded-full h-2.5 mr-2 relative overflow-hidden" style={{ minWidth: 80 }}>
+                                                {/* Bar in_progress */}
                                                 <div
-                                                    className="bg-indigo-600 h-2.5 rounded-full"
+                                                    className="absolute left-0 top-0 h-2.5 bg-indigo-600"
                                                     style={{
-                                                        width: `${Math.min((w.totalHours / 40) * 100, 100)}%`
+                                                        width: `${Math.min((w.inProgressHours / 40) * 100, 100)}%`,
+                                                        zIndex: 2,
+                                                    }}
+                                                ></div>
+                                                {/* Bar done */}
+                                                <div
+                                                    className="absolute left-0 top-0 h-2.5 bg-green-400"
+                                                    style={{
+                                                        width: `${Math.min(((w.inProgressHours + w.doneHours) / 40) * 100, 100)}%`,
+                                                        opacity: 0.7,
+                                                        zIndex: 1,
                                                     }}
                                                 ></div>
                                             </div>
-                                            <span className="text-xs font-semibold text-indigo-700">
-                                                {w.totalHours.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 2 })} jam
+                                            <span className="text-xs font-semibold text-indigo-700 mr-1">
+                                                {w.inProgressHours.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 2 })} jam
+                                            </span>
+                                            <span className="text-xs font-semibold text-green-700">
+                                                + {w.doneHours.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 2 })} jam
                                             </span>
                                         </div>
 

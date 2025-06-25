@@ -607,13 +607,17 @@ export default function ProjectGanttView() {
                                           : ""}
                                       </span>
                                       {/* Tooltip */}
-                                      <div className="absolute left-0 top-8 z-50 hidden group-hover:block bg-white border rounded shadow px-3 py-2 text-xs text-gray-700 min-w-[180px]">
+                                      <div className="left-48 top-10 z-50 hidden group-hover:block bg-white border rounded shadow px-3 py-2 text-xs text-gray-700 min-w-[180px]">
                                         <div className="font-bold">{task.title}</div>
                                         <div>Status: <span className="capitalize">{task.status.replace("_", " ")}</span></div>
+                                        <div>
+                                          Completed: {task.completed_at ? dayjs(task.completed_at).format("DD MMM YYYY") : "-"}
+                                        </div>  
                                         <div>Start: {dayjs(task.start_date).format("DD MMM YYYY")}</div>
                                         <div>Due: {dayjs(task.due_date).format("DD MMM YYYY")}</div>
                                         {task.assignee && <div>Assignee: {task.assignee.name}</div>}
                                       </div>
+
                                     </div>
                                   </td>
                                 );
