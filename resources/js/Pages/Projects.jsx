@@ -1004,14 +1004,19 @@ export default function Projects() {
                 </div>
                 {/* Ribbon/Badge */}
                 <div className="absolute top-0 right-0">
-                  {stats.percent === 100 && (
-                    <span className="bg-green-500 text-white text-[10px] px-2 py-1 rounded-bl-xl rounded-tr-2xl font-bold shadow">
-                      Completed
+                  {(stats.total === 0 || stats.inProgress === 0) && stats.done === 0 && (
+                    <span className="bg-gray-400 text-white text-[10px] px-2 py-1 rounded-bl-xl rounded-tr-2xl font-bold shadow">
+                      Not Started
                     </span>
                   )}
-                  {stats.overdue > 0 && (
-                    <span className="bg-red-500 text-white text-[10px] px-2 py-1 rounded-bl-xl rounded-tr-2xl font-bold shadow ml-1">
-                      Overdue
+                  {stats.total > 0 && stats.inProgress > 0 && stats.percent !== 100 && (
+                    <span className="bg-yellow-400 text-white text-[10px] px-2 py-1 rounded-bl-xl rounded-tr-2xl font-bold shadow">
+                      In Progress
+                    </span>
+                  )}
+                  {stats.percent === 100 && stats.total > 0 && (
+                    <span className="bg-green-500 text-white text-[10px] px-2 py-1 rounded-bl-xl rounded-tr-2xl font-bold shadow">
+                      Completed
                     </span>
                   )}
                 </div>
